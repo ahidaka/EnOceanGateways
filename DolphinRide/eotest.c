@@ -3,82 +3,40 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
+#include <time.h>
 #include <termio.h>
 
-typedef unsigned char byte;
+#include "dpride.h"
 
 #define EO_ESP_PORT "/dev/ttyUSB0"
 #define EO_DIRECTORY "/var/tmp/dpride"
 #define EO_CONTROL_FILE "eofilter.txt"
 #define EO_EEP_FILE "eep2.6.5.xml"
-#define EO_FILTER_SIZE 64
+#define EO_FILTER_SIZE 128
 
-typedef enum _eo_file_op
-{
-	Ignore, Read, Clear
-} EO_FILE_OP;
-
-typedef enum _eo_mode
-{
-	Monitor, Register, Operation
-} EO_MODE;
-
-typedef struct _eo_control
-{
-	EO_MODE Mode;
-        int CFlags;
-        int VFlags;
-        int Timeout;
-        char *ControlFile;
-        char *EEPFile;
-        char *BridgeDirectory;
-} EO_CONTOL;
-
-typedef struct _eepdata
-{
-        int porg;
-        int func;
-        int type;
-        int manID;
-} EEP_DATA;
-
-typedef enum _eo_packet_type
-{
-        Radio = 0x01,
-        Response = 0x02,
-        RadioSubTel = 0x03,
-        Event = 0x04,
-        CommonCommand = 0x05,
-        SmartAckCommand = 0x06,
-        RmoteManCommand = 0x07,
-        RadioMessage = 0x09,
-        RadioErp2 = 0x0A,
-        ConfigCommand = 0x0B,
-        Radio802_15_4 = 0x10,
-        Command2_4 = 0x11,
-} EO_PACKET_TYPE;
-
-typedef struct _eo_serial
-{
-	int fd;
-	int opened;
-	int debug;
-} EO_PORT;
-
+//
 static EO_CONTROL EoControl;
 
-static EO_PORT EoPort {.debug = 1;};
+static EO_PORT EoPort;
 
-static long EoFilterList[128];
+static long EoFilterList[EO_FILTER_SIZE];
 
-void DebugPrint()
+//
+//
+//
+void DebugPrint(char *s)
 {
+	if (EoControl.Debug) {
+		printf("*debug:%s\n", s);
+	}
 }
 
 void USleep(int Usec)
 {
 	const int mega = (1000 * 1000);
-	struct timespec t = {.tv_sec = 0;};
+	struct timespec t;
+	t.tv_sec = 0;
+
 	int sec = Usec / mega;
 
 	if (sec > 0) {
@@ -88,22 +46,14 @@ void USleep(int Usec)
 	nanosleep(&t, NULL);
 }
 
-int EoInitialize(char *FilterList)
-//EoInitialize(filterFile, filterList, EO_FILTER_SIZE);
-{
-        count = EoReadFilter(file, list, 2);
-
-        printf("count=%d\n", count);
-}
-
-int EoReadFilter(char *file, long *list, int size)
+int EoReadFilter(char *File, long *List, int Size)
 {
         FILE *fp;
         long id;
         int count = 0;
         char buffer[BUFSIZ];
 
-        fp = fopen(file, "r");
+        fp = fopen(File, "r");
         if (fp == NULL) {
                 // open error
                 return -1;
@@ -114,28 +64,20 @@ int EoReadFilter(char *file, long *list, int size)
                 id = strtol(buffer, NULL, 16);
                 if (id == 0)
                         continue;
-                *list++ = id;
+                *List++ = id;
                 count++;
-                if (size != 0 && count >= size)
+                if (Size != 0 && count >= Size)
                         break;
         }
         fclose(fp);
         return (count);
 }
 
-int EoClearFilter(char *file, long *list, int size)
+void EoClearFilter(char *File)
 {
-        FILE *fp;
-        fp = fopen(file, "r+w");
-        if (fp == NULL) {
-                // open error
-                return -1;
-        }
-        if (!ftruncate(fp, 0)) {
+        if (truncate(File, 0)) {
 		fprintf(stderr, "%s: truncate error\n", __FUNCTION__);
         }
-        fclose(fp);
-        return (count);
 }
 
 bool EoReceiveFilter(long *FilterList, int FilterCount)
@@ -145,6 +87,7 @@ bool EoReceiveFilter(long *FilterList, int FilterCount)
 	{
 		;
 	}
+	return true;
 }
 
 void EoBufferFilter(char *buffer, int id)
@@ -154,7 +97,7 @@ void EoBufferFilter(char *buffer, int id)
         buffer[2] = 7; // Data Length[1]
         buffer[3] = 0; // Optional Length
         buffer[4] = 5; // Packet Type = CO (5)
-        buffer[5] = Crc8CheckEx(buffer, 1, 4); // CRC8H
+        buffer[5] = Crc8CheckEx((byte*)buffer, 1, 4); // CRC8H
         buffer[6] = 11; // Command Code = CO_WR_FILTER_ADD (11)
         buffer[7] = 0;  // FilterType = Device ID (0)
         buffer[8] = (char)((id >> 24) & 0xFF); // ID[0]
@@ -162,7 +105,7 @@ void EoBufferFilter(char *buffer, int id)
         buffer[10] = (char)((id >> 8) & 0xFF); // ID[2]
         buffer[11] = (byte)(id & 0xFF); // ID[3]
         buffer[12] = 0x80; // Filter Kind = apply (0x80)
-        buffer[13] = Crc8CheckEx(buffer, 6, 7); // CRC8D
+        buffer[13] = Crc8CheckEx((byte*)buffer, 6, 7); // CRC8D
 }
 
 void EoSetFilter(bool enable)
@@ -179,36 +122,21 @@ void EoSetFilter(bool enable)
                 writeBuffer[2] = 1; // Data Length[1]
                 writeBuffer[3] = 0; // Optional Length
                 writeBuffer[4] = 5; // Packet Type = CO (5)
-                writeBuffer[5] = Crc8CheckEx(writeBuffer, 1, 4); // CRC8H
+                writeBuffer[5] = Crc8CheckEx((byte*)writeBuffer, 1, 4); // CRC8H
                 writeBuffer[6] = 13; // Command Code = CO_WR_FILTER_DEL (13)
-                writeBuffer[7] = Crc8CheckEx(writeBuffer, 6, 1); // CRC8D
+                writeBuffer[7] = Crc8CheckEx((byte*)writeBuffer, 6, 1); // CRC8D
 		EoPortWrite(writeBuffer, 0, 8);
 		USleep(50*1000);
 	}
-	if (writeFilter && switchID != 0)
+#if 0
+	if (writeFilter)
 	{
 		DebugPrint("SwitchID Add Filter");
 		EoBufferFilter(writeBuffer, switchID);
 		EoPortWrite(writeBuffer, 0, 14);
 		USleep(50*1000);
 	}
-
-	if (writeFilter && co2ID != 0)
-	{
-		DebugPrint("Co2ID Add Filter");
-		EoBufferFilter(writeBuffer, co2ID);
-		EoPortWrite(writeBuffer, 0, 14);
-		USleep(50*1000);
-	}
-
-	if (writeFilter && tempID != 0)
-	{
-		DebugPrint("TempID Add Filter");
-		EoBufferFilter(writeBuffer, tempID);
-		EoPortWrite(writeBuffer, 0, 14);
-		USleep(50*1000);
-	}
-
+#endif
 	if (writeFilter)
 	{
 		DebugPrint("Enable Filters");
@@ -217,14 +145,14 @@ void EoSetFilter(bool enable)
 		writeBuffer[2] = 3; // Data Length[1]
 		writeBuffer[3] = 0; // Optional Length
 		writeBuffer[4] = 5; // Packet Type = CO (5)
-		writeBuffer[5] = Crc8CheckEx(writeBuffer, 1, 4); // CRC8H
+		writeBuffer[5] = Crc8CheckEx((byte*)writeBuffer, 1, 4); // CRC8H
 		writeBuffer[6] = 14; // Command Code = CO_WR_FILTER_ENABLE (14)
 		writeBuffer[7] = 1;  // Filter Enable = ON (1)
 		writeBuffer[8] = 0;  // Filter Operator = OR (0)
 		//Writebuffer[8] = 1;  // Filter Operator = AND (1)
-		writeBuffer[9] = Crc8CheckEx(writeBuffer, 6, 3); // CRC8D
+		writeBuffer[9] = Crc8CheckEx((byte*)writeBuffer, 6, 3); // CRC8D
 
-		EoPort1Write(writeBuffer, 0, 10);
+		EoPortWrite(writeBuffer, 0, 10);
 		USleep(50*1000);
 	}
 }
@@ -232,8 +160,10 @@ void EoSetFilter(bool enable)
 bool EoPortOpen()
 {
 	EO_PORT *p = &EoPort;
+	int fd;
+	struct termios tio;
 
-	if (p->opend) {
+	if (p->Opened) {
 		fprintf(stderr, "%s: already opened\n", __FUNCTION__);
 		return false;
 	}
@@ -242,21 +172,27 @@ bool EoPortOpen()
 		fprintf(stderr, "%s: open error\n", __FUNCTION__);
 		return false;
 	}
-	p->fd = fd;
+	p->Fd = fd;
+
+	bzero((void *) &tio, sizeof(tio));
+	tio.c_cflag = B57600 | CRTSCTS | CS8 | CLOCAL | CREAD;
+	tio.c_cc[VMIN] = 1;
+	tcsetattr(fd, TCSANOW, &tio);
+
 	return true;
 }
 
 bool EoPortWrite(char * Buffer, int Offset, int Length)
 {
-	EoPortWrite(writeBuffer, 0, 14);
+	EoPortWrite(Buffer, 0, 14);
 	EO_PORT *p = &EoPort;
 	int length;
 
-	if (!p->opend) {
+	if (!p->Opened) {
 		fprintf(stderr, "%s: fd not opened\n", __FUNCTION__);
 		return false;
 	}
-	length = write(p->fd, &Buffer[Offset], Length);
+	length = write(p->Fd, &Buffer[Offset], Length);
 	if (length != Length) {
 		fprintf(stderr, "%s: write error\n", __FUNCTION__);
 		return false;
@@ -267,30 +203,30 @@ bool EoPortWrite(char * Buffer, int Offset, int Length)
 bool EoGetHeader(EO_PACKET_TYPE *outPacketType, int *outDataLength, int *outOptionLength)
 {
 	int length;
-	EO_PACKET_TYPE outPacketType;
+	EO_PACKET_TYPE packetType;
 	int dataLength;
 	int optionLength;
 	char c;
 	byte crc8h;
 	char header[4];
 	EO_PORT *p = &EoPort;
-	bool gotHeader;
+	//bool gotHeader;
 
-	if (!p->opend) {
+	if (!p->Opened) {
 		fprintf(stderr, "%s: fd not opened\n", __FUNCTION__);
 		return false;
 	}
 
 	// serch for preamble
 	while(true) {
-		length = read(p->fd, &c, 1);
+		length = read(p->Fd, &c, 1);
 		if (length == 1 && c == 0x55) {
 			//printf("find preamble\n");
 			break;
 		}
 	}
 
-	length = read(p->fd, header, 4);
+	length = read(p->Fd, header, 4);
 	if (length < 4) {
 		fprintf(stderr, "%s: header error\n", __FUNCTION__);
 		return false;
@@ -298,51 +234,52 @@ bool EoGetHeader(EO_PACKET_TYPE *outPacketType, int *outDataLength, int *outOpti
 
 	dataLength = header[0] << 8 | header[1];
 	optionLength = header[2];
-	packetType = (PacketType)header[3];
+	packetType = (EO_PACKET_TYPE)header[3];
 
 	// read crc8 byte
-	length = read(p->fd, &crc8h, 1);
+	length = read(p->Fd, &crc8h, 1);
 	if (length != 1) {
 		fprintf(stderr, "%s: read crc8 error\n", __FUNCTION__);
 		return false;
 	}
 	if (outPacketType)
-		*outPacketType = outPacketType;
+		*outPacketType = packetType;
 	if (outDataLength)
 		*outDataLength = dataLength;
 	if (outOptionLength)
 		*outOptionLength = optionLength;
 
-	return (gotHeader = crc8h == Crc8Checkcrc8(header, 4));
+	return (crc8h == Crc8Check((byte*)header, 4));
 }
 
 int EoGetBody(EO_PACKET_TYPE PacketType, int DataLength, int OptionLength,
-	      char *Data, char *Option)
+	      char *Id, char *Erp2Hdr, char *Data, char *Option)
 {
 	int length;
 	int dataOffset = 0;
 	int nu = 0;
-	char rorg;
+	char erp2hdr;
 	char crc8d;
 	char readBuffer[48];
-	char id[4];
+	char *id = &Id[0];
+	char *data = &Data[0];
 	EO_PORT *p = &EoPort;
 
-	if (!p->opend) {
+	if (!p->Opened) {
 		fprintf(stderr, "%s: fd not opened\n", __FUNCTION__);
 		return false;
 	}
 
-	length = read(p->fd, readBuffer, DataLength);
+	length = read(p->Fd, readBuffer, DataLength);
 	if (length != DataLength) {
 		fprintf(stderr, "%s: read data error\n", __FUNCTION__);
 		return false;
 	}
 
-	if (packetType == Radio || packetType == RadioErp2)
+	if (PacketType == Radio || PacketType == RadioErp2)
 	{
-		rorg = readBuffer[0];
-		if (rorg == 0x62)
+		erp2hdr = readBuffer[0];
+		if (erp2hdr == 0x62)
 		{
                         dataOffset = 2;
 		}
@@ -351,7 +288,7 @@ int EoGetBody(EO_PACKET_TYPE PacketType, int DataLength, int OptionLength,
 		id[1] = readBuffer[3 + dataOffset];
 		id[0] = readBuffer[4 + dataOffset];
 
-		if (rorg == 0x20) // RPS
+		if (erp2hdr == 0x20) // RPS
 		{
                         //dataSize = 1;
                         nu = (readBuffer[5 + dataOffset] >> 7) & 0x01;
@@ -360,7 +297,7 @@ int EoGetBody(EO_PACKET_TYPE PacketType, int DataLength, int OptionLength,
                         data[2] = 0;
                         data[3] = 0;
 		}
-		else if (rorg == 0x22) // 4BS
+		else if (erp2hdr == 0x22) // 4BS
 		{
                         //dataSize = 4;
                         data[0] = readBuffer[5 + dataOffset];
@@ -368,7 +305,7 @@ int EoGetBody(EO_PACKET_TYPE PacketType, int DataLength, int OptionLength,
                         data[2] = readBuffer[7 + dataOffset];
                         data[3] = readBuffer[8 + dataOffset];
 		}
-		else if (rorg == 0x62)  // Teach-In
+		else if (erp2hdr == 0x62)  // Teach-In
 		{
                         //dataSize = 4;
                         data[0] = readBuffer[5 + dataOffset];
@@ -378,15 +315,15 @@ int EoGetBody(EO_PACKET_TYPE PacketType, int DataLength, int OptionLength,
 		}
 		else
 		{
-                        fprintf(stderr, "%s: Unknown rorg = %02x",
-				__FUNCTION__, rorg);
+                        fprintf(stderr, "%s: Unknown erp2hdr = %02x",
+				__FUNCTION__, erp2hdr);
 			return false;
 		}
 	}
 
 	if (OptionLength > 0)
 	{
-		length = read(p->fd, readBuffer + DataLength, OptionLength);
+		length = read(p->Fd, readBuffer + DataLength, OptionLength);
 		if (length != DataLength) {
 			fprintf(stderr, "%s: read option error\n", __FUNCTION__);
 			return false;
@@ -394,14 +331,14 @@ int EoGetBody(EO_PACKET_TYPE PacketType, int DataLength, int OptionLength,
 	}
 
 	//check crc8d
-	length = read(p->fd, readBuffer + DataLength + OptionLength, 1);
+	length = read(p->Fd, readBuffer + DataLength + OptionLength, 1);
 	if (length != 1) {
 		fprintf(stderr, "%s: read crc8d error\n", __FUNCTION__);
 		return false;
 	}
 	
 	crc8d = readBuffer[DataLength + OptionLength];
-	if (crc8d != crc.crc8(readBuffer, DataLength + OptionLength))
+	if (crc8d != Crc8Check((byte*)readBuffer, DataLength + OptionLength))
 	{
 		fprintf(stderr, "%s: Invalid data crc", __FUNCTION__);
 		return false;
@@ -409,6 +346,8 @@ int EoGetBody(EO_PACKET_TYPE PacketType, int DataLength, int OptionLength,
 
 	////////
 	// now return data, option ,id
+	printf("id=%02x%02x%02x%02x nu=%02x\n",
+	       id[0],id[1],id[2],id[3],nu);
 
 	return true;
 }
@@ -418,7 +357,7 @@ int EoGetBody(EO_PACKET_TYPE PacketType, int DataLength, int OptionLength,
 
 // static class crc
 //{
-static byte crc8Table[] =
+static byte Crc8Table[] =
 {
         0x00, 0x07, 0x0e, 0x09, 0x1c, 0x1b, 0x12, 0x15,
         0x38, 0x3f, 0x36, 0x31, 0x24, 0x23, 0x2a, 0x2d,
@@ -454,21 +393,21 @@ static byte crc8Table[] =
         0xe6, 0xe1, 0xe8, 0xef, 0xfa, 0xfd, 0xf4, 0xf3
 };
 
-int crc8CheckEx(byte *data, size_t offset, size_t count)
+int Crc8CheckEx(byte *data, size_t offset, size_t count)
 {
+	int i;
         byte crc = 0;
         count += offset;
-        for (int i = offset; i < count; i++) {
-                crc = crc8Table[crc ^ data[i]];
+        for (i = offset; i < count; i++) {
+                crc = Crc8Table[crc ^ data[i]];
         }
         return crc;
 }
 
-int crc8Check(byte *data, size_t count)
+int Crc8Check(byte *data, size_t count)
 {
-        return crc8CheckEx(data, 0, count);
+        return Crc8CheckEx(data, 0, count);
 }
-
 
 void EoParameter(int ac, char**av, EO_CONTROL *p)
 {
@@ -478,7 +417,6 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
         int cFlags = 0;
         int vFlags = 0;
         int opt;
-        int i;
         int timeout = 0;
         char *controlFile;
         char *bridgeDirectory;
@@ -486,22 +424,22 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
 
         while ((opt = getopt(ac, av, "mrocvf:d:t:e:")) != EOF) {
                 switch (opt) {
-                case 'm':
+                case 'm': //Monitor mode
                         mFlags++;
                         rFlags = oFlags = 0;
                         break;
-                case 'r':
+                case 'r': //Register mode
                         rFlags++;
                         mFlags = oFlags = 0;
                         break;
-                case 'o':
+                case 'o': //Operation mode
                         oFlags++;
                         mFlags = rFlags = 0;
                         break;
-                case 'c':
+                case 'c': //clear before register
                         cFlags++;
                         break;
-                case 'v':
+                case 'v': //Verbose
                         vFlags++;
                         break;
 
@@ -544,80 +482,104 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
 }
 
 //
+bool MainJob()
+{
+	EO_CONTROL *p = &EoControl;
+	bool working;
+	EO_PACKET_TYPE packetType;
+	int dataLength;
+	int optionLength;
+	char id[4];
+	char data[BUFSIZ];
+	char option[BUFSIZ];
+	char erp2hdr;
+
+	working = EoGetHeader(&packetType, &dataLength, &optionLength);
+	if (!working) {
+		PrintError();
+		exit(1);
+	}
+	working = EoGetBody(packetType, dataLength, optionLength, id, &erp2hdr, data, option);
+	if (!working) {
+		PrintError();
+		exit(1);
+	}
+
+	switch(packetType) {
+
+	case Radio:
+	case RadioErp2:
+
+		switch(erp2hdr) {
+		case 0x20: //RPS:
+			break;
+
+		case 0x22: //4BS:
+			break;
+
+		case 0x62: //4BS-Teach in:
+			if (p->Mode == Register) {
+				EoSetEep(id);
+			}
+			break;
+		}
+		break;
+
+	default:
+		// ignore other type
+		break;
+	}
+	return working;
+}
+//
 //
 //
 int main(int ac, char **av)
 {
 	bool working;
-	int currentId;
-	int currentEep;
-	long filterList[EO_FILTER_SIZE];
-	EO_PACKET_TYPE packetType;
 	EO_CONTROL *p = &EoControl;
-	int filterCount;
+	int filterCount = 0;
 
-	memset(filterList, 0, sizeof(long) * EO_FILTER_SIZE);
+	memset(EoFilterList, 0, sizeof(long) * EO_FILTER_SIZE);
 
 	EoParameter(ac, av, p);
 
-	if (p->FilterFile == Read) {
-		count = EoInitialize(p->FilterFile, filterList, EO_FILTER_SIZE);
+	switch(p->Mode) {
+	case Monitor:
+		p->FilterOp = Ignore;
+		break;
+
+	case Register:
+		p->FilterOp = p->CFlags ? Clear : Ignore;
+		break;
+
+	case Operation:
+		p->FilterOp = Read;
+		break;
 	}
-	else if (p->FilterFile == Clear) {
-		EoClearFile(p->FilterFile);
+
+	if (p->FilterOp == Read) {
+		filterCount = EoReadFilter(p->FilterFile, EoFilterList, EO_FILTER_SIZE);
+	}
+	else if (p->FilterOp == Clear) {
+		EoClearFilter(p->FilterFile);
 	}
 
 	if (!EoPortOpen()) {
-		fprintf(stderr, "open error");
+		fprintf(stderr, "port open error\n");
 		exit(1);
 	}
 	working = true;
 
-	if (filerCount > 0) {
-		if (!EoReceiveFilter(filterList, count)) {
-			fprintf(stderr, "open error");
+	if (filterCount > 0) {
+		if (!EoReceiveFilter(EoFilterList, filterCount)) {
+			fprintf(stderr, "filter error\n");
 			exit(1);
 		}
 	}
 
 	while(working) {
-		working = EoGetHeader();
-		if (!working) {
-			printerror();
-			exit(1);
-		}
-		working = EoGetBody();
-		if (!working) {
-			printerror();
-			exit(1);
-		}
-
-		working = EoAnalizePacket(&packetType);
-		if (!working) {
-			printerror();
-			exit(1);
-		}
-
-		switch(packetType) {
-		case TeachIn:
-			EoSetEep(id);
-			break;
-		case Radio:
-		case RadioErp2:
-
-			switch(rorg) {
-			case RORG_4BS:
-				break;
-			}
-
-			break;
-		case TeachIn:
-			break;
-		default:
-			// ignore other type
-			break;
-		}
-
+		working = MainJob();
 	}
-	exit(0);
+	return 0;
 }

@@ -1,5 +1,7 @@
 //
 //
+#pragma once
+
 typedef unsigned char byte;
 typedef int bool;
 typedef unsigned int uint;
@@ -24,7 +26,9 @@ typedef struct _eo_control
         int Timeout;
 	EO_FILE_OP FilterOp;
         int Debug;
+	int ControlCount;
         char *ControlFile;
+	char *ControlPath;
         char *FilterFile;
         char *EEPFile;
         char *BridgeDirectory;
@@ -65,19 +69,21 @@ typedef enum _eo_packet_type
 
 //
 //
+#define Warn(msg)  fprintf(stderr, "#WARN %s: %s\n", __FUNCTION__, msg)
+#define Error(msg)  fprintf(stderr, "*ERR %s: %s\n", __FUNCTION__, msg)
+#define Error2(msg)  fprintf(stderr, "*ERR %s: %s=%s\n", __FUNCTION__, msg, arg)
+
 void DebugPrint(char *s);
 
 void USleep(int Usec);
 
-void MakePath(char *Path, char *Dir, char *File);
+char *MakePath(char *Dir, char *File);
 
-int EoReadFilter(char *File, long *List, int Size);
+int EoReadControl();
 
-void EoClearFilter(char *File);
+void EoClearControl();
 
-bool EoReceiveFilter(long *FilterList, int FilterCount);
-
-void EoBufferFilter(char *buffer, int id);
+bool EoApplyFilter();
 
 void EoSetFilter(bool enable);
 
@@ -90,24 +96,60 @@ bool EoGetHeader(EO_PACKET_TYPE *outPacketType, int *outDataLength, int *outOpti
 int EoGetBody(EO_PACKET_TYPE PacketType, int DataLength, int OptionLength,
               byte *Id, byte *Erp2Hdr, byte *Data, byte *Option);
 
+bool EoGetResponse(int *Code);
+
+void FilterAddId(uint id);
+
+void FilterClear();
+
+void FilterEnable();
+
+
 byte Crc8CheckEx(byte *data, size_t offset, size_t count);
 
 byte Crc8Check(byte *data, size_t count);
 
 void EoParameter(int ac, char**av, EO_CONTROL *p);
 
-void EoSetEep(EO_CONTROL *P, byte *Id, byte *Data);
+void EoSetEep(EO_CONTROL *P, byte *Id, byte *Data, uint Rorg);
 
 void PrintTelegram(EO_PACKET_TYPE packetType, byte *id, byte erp2hdr, byte *data);
 
-inline void PrintError() {}
+bool CheckTableId(uint Target);
 
-inline void DataToEEP(byte *data, uint *pFunc, uint *pType, uint *pMan)
+bool CheckTableEep(char *Target);
+
+char *GetNewName(char *Target);
+
+int ReadCsv(char *Filename);
+
+uint GetId(int Index);
+
+void WriteRpsBridgeFile(uint Id, byte *Data);
+
+void Write4bsBridgeFile(uint Id, byte *Data);
+
+void WriteBridge(char *FileName, double ConvertedData);
+
+static inline void DataToEep(byte *data, uint *pFunc, uint *pType, uint *pMan)
 {
-	uint func = ((uint)data[0]) >> 2;
-	uint type = ((uint)data[0] & 0x03) << 5 | ((uint)data[1]) >> 3;
-	int manID = (data[1] & 0x07) << 8 | data[2];
-	if (pFunc) *pFunc = func;
-	if (pType) *pType = type;
-	if (pMan) *pMan = manID;
+        uint func = ((uint)data[0]) >> 2;
+        uint type = ((uint)data[0] & 0x03) << 5 | ((uint)data[1]) >> 3;
+        int manID = (data[1] & 0x07) << 8 | data[2];
+        if (pFunc) *pFunc = func;
+        if (pType) *pType = type;
+        if (pMan) *pMan = manID;
+}
+
+static inline uint StrToId(byte str[4])
+{
+        char buf[8];
+        *((uint *)buf) = *((uint *)&str[0]);
+        *((uint *)&buf[4]) = 0UL;
+        return(strtoul(buf, NULL, 16));
+}
+
+static inline uint ByteToId(byte Bytes[4])
+{
+        return(*((uint *) Bytes));
 }

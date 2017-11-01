@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <libxml/xmlreader.h>
 
+#include "dpride.h"
 #include "ptable.h"
 
 typedef enum {
@@ -123,8 +124,12 @@ inline void StringCopy(char **dst, char *src)
 		free((void *) *dst);
 		*dst = NULL;
 	}
-	if (src != NULL && strlen(src) > 0)
+	if (src != NULL && strlen(src) > 0) {
 		*dst = strdup(src);
+		if (*dst == NULL) {
+			Warn("strdup() error");
+		}
+	}
 }
 
 inline void IntegerCopy(int *dst, char *src)
@@ -157,15 +162,26 @@ int HexTrim(char *dst, char *src)
 }
 
 
-void SaveEEP(EEP_TABLE *Table, int FieldCount, char *EepString, DATAFIELD *Pd)
+void SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DATAFIELD *Pd)
 {
 	int tableSize;
 	DATAFIELD *table = NULL;
 	DATAFIELD *pt;
 	int i;
 
+	_D printf("SaveEep: %d <%s><%s><%s>\n",
+		  FieldCount, EepString, Title, Pd ? Pd->DataName : "");
+
 	Table->Size = FieldCount;
 	strcpy(Table->Eep, EepString);
+	if (Title != NULL && *Title != '\0') {
+		Table->Title = strdup(Title);
+		if (Table->Title == NULL) {
+			Warn("Title: strdup() error");
+		}
+	}
+	else Table->Title = "";
+
 	if (FieldCount > 0) {
 		tableSize = sizeof(DATAFIELD) * FieldCount;
 		pt = table = malloc(tableSize);
@@ -179,17 +195,27 @@ void SaveEEP(EEP_TABLE *Table, int FieldCount, char *EepString, DATAFIELD *Pd)
 		  EepString, sizeof(DATAFIELD), FieldCount, tableSize);
 	for(i = 0; i < FieldCount; i++) {
 		if (Pd->DataName) {
-			pt->DataName = strdup(Pd->DataName);
-			if (Pd->ShortCut)
+			if (Pd->DataName) {
+				pt->DataName = strdup(Pd->DataName);
+				if (pt->DataName == NULL)
+					Warn("DataName: strdup() error");
+			}
+			if (Pd->ShortCut) {
 				pt->ShortCut = strdup(Pd->ShortCut);
+				if (pt->ShortCut == NULL)
+					Warn("ShortCut: strdup() error");
+			}
 			pt->BitOffs = Pd->BitOffs;
 			pt->BitSize = Pd->BitSize;
 			pt->RangeMin = Pd->RangeMin;
 			pt->RangeMax = Pd->RangeMax;
 			pt->ScaleMin = Pd->ScaleMin;
 			pt->ScaleMax = Pd->ScaleMax;
-			if (Pd->Unit)
+			if (Pd->Unit) {
 				pt->Unit = strdup(Pd->Unit);
+				if (pt->Unit == NULL)
+					Warn("Unit: strdup() error");
+			}
 		}
 		pt++, Pd++;
 	}
@@ -357,7 +383,7 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
 		    HexTrim(func, FuncNumber);
 		    HexTrim(type, TypeNumber);
 		    sprintf(eepString, "%s-%s-%s", rorg, func, type);
-		    _D printf("*EEP:%s (%d)\n", eepString, dataTableIndex);
+		    _D printf("*EEP:%s (%d) <%s>\n", eepString, dataTableIndex, FuncTitle);
 		    pd = &dataTable[0];
 		    for(i = 0; i < dataTableIndex; i++, pd++){
 			    if (pd->Reserved) {
@@ -391,8 +417,13 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
 		    fieldCount = i;
 
 		    // Output rorg='A5' only
-		    if (fieldCount > 0 && eepString[0] == 'A' && eepString[1] == '5') {
-			    SaveEEP(Table, fieldCount, eepString, &dataTable[0]);
+		    if (fieldCount > 0 && 
+			    (!strncmp(eepString, "F6", 2) // RPS
+			     || !strncmp(eepString, "D5", 2) // 1BS
+			     || !strncmp(eepString, "A5", 2) // 4BS
+			     || !strncmp(eepString, "D2", 2) // VLD
+				    )) {
+				SaveEep(Table, fieldCount, eepString, FuncTitle, &dataTable[0]);
 		    }
 		    else {
 			    fieldCount = 0;
@@ -536,7 +567,7 @@ void PrintNode(DATAFIELD *pd, int Size)
 	}
 }
 
-void PrintEEPAll()
+void PrintEepAll()
 {
 	EEP_TABLE *pe = EepTable;
 	int fcnt = 0;
@@ -550,7 +581,7 @@ void PrintEEPAll()
 	}
 }
 
-void PrintEEP(char *EEP)
+void PrintEep(char *EEP)
 {
 	EEP_TABLE *pe = EepTable;
 	while(pe->Eep[0] != '\0' ) {
@@ -564,7 +595,7 @@ void PrintEEP(char *EEP)
 	}
 }
 
-EEP_TABLE *GetEEP(char *EEP)
+EEP_TABLE *GetEep(char *EEP)
 {
 	EEP_TABLE *pe = EepTable;
 	while(pe->Eep[0] != '\0' ) {
@@ -576,11 +607,24 @@ EEP_TABLE *GetEEP(char *EEP)
 	return NULL;
 }
 
-int InitEEP(char *Profile)
+int InitEep(char *Profile)
 {
 	xmlTextReaderPtr reader;
 	int ret, count;
 	int numField;
+	static DATAFIELD D2_03_20_ES = {
+		0,
+		"Energy Supply",
+		"ES",
+		0, //Bitoffs
+		1, //Bitsize
+		0, //RangeMin
+		1, //RangeMax
+		0, //ScaleMin
+		1, //ScaleMax
+		"", //Unit
+		{{0, NULL}}, //Enum
+	}; 
 
 	EepTable = malloc(sizeof(EEP_TABLE) * EEP_SIZE);
 	if (!EepTable) {
@@ -616,7 +660,11 @@ int InitEEP(char *Profile)
 	}
     
 	_D printf("<<end count=%d>>\n", count);
-	SaveEEP(&EepTable[count], 0, "\0", NULL); //Add end if table mark
+	SaveEep(&EepTable[count++], 1, "D2-03-20",
+		"Beacon with Vibration Detection",
+		&D2_03_20_ES); //Add Custom "D2-03-20",
+
+	SaveEep(&EepTable[count], 0, "\0", "\0", NULL); //Add end if table mark
 
 	xmlFreeTextReader(reader);
 

@@ -1,6 +1,7 @@
 //
 // ptable.h -- Profile Table
 //
+#pragma once
 
 #define ENUM_SIZE 32
 #define EEP_STRSIZE 10
@@ -30,13 +31,16 @@ typedef struct _eep_table
 {
         int Size;
         char Eep[EEP_STRSIZE];
+	char *Title;
         DATAFIELD *Dtable;
 } EEP_TABLE;
 
 //
 // export functions
 //
-int InitEEP(char *Profile);
-EEP_TABLE *GetEEP(char *EEP);
-void PrintEEPAll();
-void PrintEEP(char *EEP);
+int InitEep(char *Profile);
+EEP_TABLE *GetEep(char *EEP);
+void PrintEepAll();
+void PrintEep(char *EEP);
+void SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DATAFIELD *Pd);
+

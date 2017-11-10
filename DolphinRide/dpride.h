@@ -131,6 +131,8 @@ void Write4bsBridgeFile(uint Id, byte *Data);
 
 void WriteBridge(char *FileName, double ConvertedData);
 
+void WriteBridgeInt(char *FileName, int Data);
+
 static inline void DataToEep(byte *data, uint *pFunc, uint *pType, uint *pMan)
 {
         uint func = ((uint)data[0]) >> 2;
@@ -153,3 +155,5 @@ static inline uint ByteToId(byte Bytes[4])
 {
         return(*((uint *) Bytes));
 }
+
+#define IsTerminator(c) ((c) == '\n' || (c) == '\r' || (c) == '\0' || (c) == '#')

@@ -134,7 +134,7 @@ bool EoApplyFilter()
 void FilterAddId(uint id)
 {
 	byte writeBuffer[16];
-	int code = 0;
+//	int code = 0;
 
 	DebugPrint("FilterAddId");
 
@@ -156,136 +156,16 @@ void FilterAddId(uint id)
 	USleep(50*1000);
 
 //	while(!EoGetResponse(&code))
-		;
-	printf("#FilterAddId(%08X) code=%x\n", id, code);
+//		;
+//	printf("#FilterAddId(%08X) code=%x\n", id, code);
 }
 
-//
-// TEST TEST TEST
-//
-#if 1
-//void BufferFilter(ref byte[] buffer, uint id)
-void BufferFilter(byte *buffer, uint id)
-{
-	buffer[0] = 0x55; // Sync Byte
-	buffer[1] = 0; // Data Length[0]
-	buffer[2] = 7; // Data Length[1]
-	buffer[3] = 0; // Optional Length
-	buffer[4] = 5; // Packet Type = CO (5)
-	//buffer[5] = crc.crc8(buffer, 1, 4); // CRC8H
-	buffer[5] = Crc8CheckEx((byte*)buffer, 1, 4); // CRC8H
-	buffer[6] = 11; // Command Code = CO_WR_FILTER_ADD (11)
-	buffer[7] = 0;  // FilterType = Device ID (0)
-	buffer[8] = (byte)((id >> 24) & 0xFF); // ID[0]
-	buffer[9] = (byte)((id >> 16) & 0xFF); // ID[1]
-	buffer[10] = (byte)((id >> 8) & 0xFF); // ID[2]
-	buffer[11] = (byte)(id & 0xFF); // ID[3]
-	buffer[12] = 0x80; // Filter Kind = apply (0x80)
-	//buffer[13] = crc.crc8(buffer, 6, 7); // CRC8D
-	buffer[13] = Crc8CheckEx((byte*)buffer, 1, 4); // CRC8H
-}
-#endif
-
-#if 1
-void FilterClear()
-//SetFilter
-{
-	int code = 0;
-	bool clearFilter = true;
-	//bool writeFilter = true;
-	//byte[] writeBuffer = new byte[16];
-	byte writeBuffer[16];
-
-	if (clearFilter)
-	{
-                if (true)
-                {
-			DebugPrint("Clear all Filters");
-			writeBuffer[0] = 0x55; // Sync Byte
-			writeBuffer[1] = 0; // Data Length[0]
-			writeBuffer[2] = 1; // Data Length[1]
-			writeBuffer[3] = 0; // Optional Length
-			writeBuffer[4] = 5; // Packet Type = CO (5)
-			//writeBuffer[5] = crc.crc8(writeBuffer, 1, 4); // CRC8H
-			writeBuffer[5] = Crc8CheckEx((byte*)writeBuffer, 1, 4); // CRC8H
-			writeBuffer[6] = 13; // Command Code = CO_WR_FILTER_DEL (13)
-			//writeBuffer[7] = crc.crc8(writeBuffer, 6, 1); // CRC8D
-			writeBuffer[7] = Crc8CheckEx((byte*)writeBuffer, 6, 1); // CRC8D
-			//serialPort1.Write(writeBuffer, 0, 8);
-			EoPortWrite(writeBuffer, 0, 10);
-			
-			//Thread.Sleep(100);
-			USleep(50*1000);
-			//GetResponse();
-			//while(!EoGetResponse(&code))
-				;
-			DebugPrint("Clear all Filters OK");
-                }
-                if (true)
-                {
-			DebugPrint("SwitchID Add Filter");
-			BufferFilter(writeBuffer, 0x002991d2);
-			//serialPort1.Write(writeBuffer, 0, 14);
-			EoPortWrite(writeBuffer, 0, 14);
-			//Thread.Sleep(100);
-			USleep(50*1000);
-                }
-
-#if 0
-                if (writeFilter && switchID != 0)
-                {
-			Debug.Print("SwitchID Add Filter");
-			BufferFilter(ref writeBuffer, switchID);
-			serialPort1.Write(writeBuffer, 0, 14);
-			Thread.Sleep(100);
-                }
-                if (writeFilter && tempID != 0)
-                {
-			Debug.Print("TempID Add Filter");
-			BufferFilter(ref writeBuffer, tempID);
-			serialPort1.Write(writeBuffer, 0, 14);
-			Thread.Sleep(100);
-			//GetResponse();
-			while(!EoGetResponse(&code))
-				;
-                }
-#endif
-	}
-	if (true /* writeFilter */)
-	{
-                DebugPrint("Enable Filters");
-                writeBuffer[0] = 0x55; // Sync Byte
-                writeBuffer[1] = 0; // Data Length[0]
-                writeBuffer[2] = 3; // Data Length[1]
-                writeBuffer[3] = 0; // Optional Length
-                writeBuffer[4] = 5; // Packet Type = CO (5)
-                //writeBuffer[5] = crc.crc8(writeBuffer, 1, 4); // CRC8H
-		writeBuffer[5] = Crc8CheckEx((byte*)writeBuffer, 1, 4); // CRC8H
-                writeBuffer[6] = 14; // Command Code = CO_WR_FILTER_ENABLE (14)
-                writeBuffer[7] = 1;  // Filter Enable = ON (1)
-                writeBuffer[8] = 0;  // Filter Operator = OR (0)
-                ////writeBuffer[8] = 1;  // Filter Operator = AND (1)
-                //writeBuffer[9] = crc.crc8(writeBuffer, 6, 3); // CRC8D
-		writeBuffer[9] = Crc8CheckEx((byte*)writeBuffer, 6, 3); // CRC8D
-
-                //serialPort1.Write(writeBuffer, 0, 10);
-		EoPortWrite(writeBuffer, 0, 10);
-                //Thread.Sleep(100);
-		USleep(50*1000);
-                //GetResponse();
-		//while(!EoGetResponse(&code))
-			;
-	}
-}
-#endif
-
-#if 0
 void FilterClear()
 {
 	byte writeBuffer[16];
-	int code;
+	//int code = 0;
 
-	DebugPrint("FilterClear");
+	DebugPrint("Clear all Filters");
 
 	writeBuffer[0] = 0x55; // Sync Byte
 	writeBuffer[1] = 0; // Data Length[0]
@@ -299,15 +179,14 @@ void FilterClear()
 	USleep(50*1000);
 
 //	while(!EoGetResponse(&code))
-		;
-	printf("#FilterClear: code=%x\n", code);
+//		;
+//	printf("#FilterClear: code=%x\n", code);
 }
-#endif
 
 void FilterEnable()
 {
 	byte writeBuffer[16];
-	int code;
+	//int code = 0;
 
 	DebugPrint("FilterEnable");
 
@@ -326,8 +205,8 @@ void FilterEnable()
 	USleep(50*1000);
 
 	//while(!EoGetResponse(&code))
-		;
-	printf("#FilterEnable: code=%x\n", code);
+	//	;
+	//printf("#FilterEnable: code=%x\n", code);
 }
 
 
@@ -465,7 +344,7 @@ bool EoGetHeader(EO_PACKET_TYPE *outPacketType, int *outDataLength, int *outOpti
 	while(true) {
 		length = read(p->Fd, &c, 1);
 		if (length == 1 && c == 0x55) {
-			printf("*****find preamble\n");
+			//printf("*****find preamble\n");
 			break;
 		}
 	}
@@ -504,7 +383,7 @@ int EoGetBody(EO_PACKET_TYPE PacketType, int DataLength, int OptionLength,
 	int dataOffset = 0;
 	byte erp2hdr;
 	byte crc8d;
-	//byte nu;
+	byte nu;
 	byte readBuffer[48];
 	byte *id = &Id[0];
 	byte *data = &Data[0];
@@ -546,11 +425,11 @@ int EoGetBody(EO_PACKET_TYPE PacketType, int DataLength, int OptionLength,
                 // RPS,1BS,VLD
 		{
                         //dataSize = 1;
-                        //nu = (readBuffer[5 + dataOffset] >> 7) & 0x01;
+                        nu = (readBuffer[5 + dataOffset] >> 7) & 0x01;
                         data[0] = readBuffer[5 + dataOffset] & 0x0F;
                         data[1] = 0;
                         data[2] = 0;
-                        data[3] = 0;
+                        data[3] = nu;
 		}
 		else if (erp2hdr == 0x22) // 4BS
 		{
@@ -931,7 +810,19 @@ void WriteBridge(char *FileName, double ConvertedData)
 }
 
 //
+void WriteBridgeInt(char *FileName, int Data)
+{
+	EO_CONTROL *p = &EoControl;
+	FILE *f;
+	char *bridgePath = MakePath(p->BridgeDirectory, FileName);
 
+	f = fopen(bridgePath, "w");
+	fprintf(f, "%d\r\n", Data);
+	fflush(f);
+	fclose(f);
+}
+
+//
 bool MainJob()
 {
 	EO_CONTROL *p = &EoControl;
@@ -1034,10 +925,9 @@ int main(int ac, char **av)
 	memset(EoFilterList, 0, sizeof(long) * EO_FILTER_SIZE);
 
 	p->Mode = Monitor; // Default mode
-	p->Debug = true; // for Debug
-
 	EoParameter(ac, av, p);
-
+	p->Debug = p->VFlags > 0;
+		
 	switch(p->Mode) {
 	case Monitor:
 		p->FilterOp = Ignore;

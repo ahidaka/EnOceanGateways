@@ -1,6 +1,6 @@
 #
 
-TARGET = dpride dptest eotest ptable comma scn profiler
+TARGET = dpride dptest eotest ptable profiler
 
 IFLAGS = -I/usr/include/libxml2
 CFLAGS = -g -Wall $(IFLAGS)
@@ -17,8 +17,9 @@ dptest: dptest.c
 	gcc $(CFLAGS) -o dptest dptest.c
 
 eotest: eotest.c
-	gcc $(CFLAGS) -o eotest eotest.c
+	gcc $(CFLAGS) -o eotest eotest.c ptable.c control.c -lxml2
 
+#dpride.o: dprode.c dpride.h ptable.h
 dpride.o: dpride.c dpride.h ptable.h
 	gcc $(CFLAGS) -c dpride.c
 

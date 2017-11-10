@@ -118,7 +118,7 @@ int debug = 0;
 #define _D if (debug > 0)
 
 //
-inline void StringCopy(char **dst, char *src)
+void StringCopy(char **dst, char *src)
 {
 	if (*dst != NULL) {
 		free((void *) *dst);
@@ -132,7 +132,7 @@ inline void StringCopy(char **dst, char *src)
 	}
 }
 
-inline void IntegerCopy(int *dst, char *src)
+void IntegerCopy(int *dst, char *src)
 {
 	if (dst != NULL && src != NULL)
 		*dst = (int) strtol(src, NULL, 10);
@@ -175,7 +175,19 @@ void SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DAT
 	Table->Size = FieldCount;
 	strcpy(Table->Eep, EepString);
 	if (Title != NULL && *Title != '\0') {
+		int len = strlen(Title);
+		char *p;
+		
 		Table->Title = strdup(Title);
+		p = Table->Title;
+		for(i = 0; i < len; i++) {
+			// supress ',' in title desc.
+			if (*p == ',' || IsTerminator(*p)) {
+				*p = ' ';
+			}
+			p++;
+		}
+		
 		if (Table->Title == NULL) {
 			Warn("Title: strdup() error");
 		}
@@ -191,7 +203,7 @@ void SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DAT
 		}
 		memset(table, 0, tableSize);
 	}
-	_DD printf("%s: sz=%lu c=%d t=%d\n",
+	_DD printf("%s: sz=%zu c=%d t=%d\n",
 		  EepString, sizeof(DATAFIELD), FieldCount, tableSize);
 	for(i = 0; i < FieldCount; i++) {
 		if (Pd->DataName) {

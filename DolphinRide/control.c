@@ -11,6 +11,8 @@
 #define SC_SIZE 16
 #define NODE_TABLE_SIZE 256
 
+//#define DEBUGP 1
+
 //
 // Control file node table
 //
@@ -47,19 +49,6 @@ typedef struct _profile_cache {
 } PROFILE_CACHE;
 
 PROFILE_CACHE CacheTable[NODE_TABLE_SIZE];
-
-
-/* EEP format
-//String
-//Packed
-//Bin3
-
-packed_eep = EepStringToPacked(str);
-(bool) EepStringToBin3(str, b1, b2, b3);
-(bool) EepBin3ToString();
-(bool) EepBin3ToPacked();
-(bool) EepPackedToBin3();
-*/
 
 NODE_TABLE *GetTableId(uint Target);
 
@@ -104,8 +93,6 @@ bool CheckTableId(uint Target)
 	bool collision = false;
 	int i;
 	NODE_TABLE *nt = &NodeTable[0];
-
-	printf("Target=%08x\n", Target);
 
 	for(i = 0; i < NODE_TABLE_SIZE; i++) {
 		if (nt->Id == 0) {
@@ -174,19 +161,11 @@ char *GetNewName(char *Target)
 	return Target;
 }
 
-
-inline bool IsTerminator(char c)
-{
-	return (c == '\n' || c == '\r' || c == '\0' || c == '#');
-}
-
 char *DeBlank(char *p)
 {
 	while(isblank(*p)) {
 		p++;
 	}
-
-
 	return p;
 }
 
@@ -318,15 +297,8 @@ PROFILE_CACHE *GetCache(char *Eep)
 	return pp;
 }
 
-inline double CalcA(double x1, double y1, double x2, double y2)
-{
-	return (double) (y1 - y2) / (double) (x1 - x2);
-}
-
-inline double CalcB(double x1, double y1, double x2, double y2)
-{
-	return ((double) x1 * y2) - ((double) x2 * y1) / ((double) (x1 - x2)); 
-}
+#define CalcA(x1, y1, x2, y2) ((double) ((y1) - (y2)) / (double) ((x1) - (x2)))
+#define CalcB(x1, y1, x2, y2) (((double) (x1) * (y2)) - ((double) (x2) * (y1)) / ((double) ((x1) - (x2))))
 
 int AddCache(char *Eep)
 {
@@ -352,21 +324,33 @@ int AddCache(char *Eep)
 		// not found
 		return 0;
 	}
+
+	if (!strncmp(Eep, "F6", 2)) { // RPS
+		// not apply
+		return 0;
+	}
+#if DEBUGP
+	printf("AddCache=%s,size=%d\n", Eep, pe->Size);
+#endif	
 	pp->Eep.Key = *((uint *) pe->Eep);
 	pu = &pp->Unit[0];
 	pd = &pe->Dtable[0];
 
 	for(i = 0; i < pe->Size; i++) {
+		if (pd->ShortCut == NULL || !strcmp(pd->ShortCut, "LRNB")) {
+			pd++;
+			continue;
+		}
 		pu->SCut = pd->ShortCut;
 		pu->FromBit = pd->BitOffs;
 		pu->SizeBit = pd->BitSize;
 		pu->Unit = pd->Unit;
 		pu->Slope = CalcA(pd->RangeMin, pd->ScaleMin, pd->RangeMax, pd->ScaleMax);
 		pu->Offset = CalcB(pd->RangeMin, pd->ScaleMin, pd->RangeMax, pd->ScaleMax);
-
-		if (pd->ShortCut == NULL) {
-			break;
-		}
+#if DEBUGP
+		printf("%d:%s %3.2lf %3.2lf\n", i, pu->SCut, pu->Slope, pu->Offset);
+#endif
+		
 		pu++,pd++;
 	}
 	return i;
@@ -417,7 +401,7 @@ int ReadCsv(char *Filename)
 		if (!GetCache(eep)) {
 			scCount = AddCache(eep);
 			if (scCount == 0) {
-				;; //Error("AddCache89 error");
+				;; //Error("AddCache() error");
 			}
 		}
 	}
@@ -442,11 +426,16 @@ void WriteRpsBridgeFile(uint Id, byte *Data)
 	char *fileName;
 	uint mask = 1;
 	uint switchData = 0;
+	char buf[BUFSIZ];
 
 	if (nt == NULL) {
 		Error("cannot find id");
 		return;
 	}
+
+	sprintf(buf, "Rps: %02X %02X %02X %02X",
+	       Data[0], Data[1], Data[2], Data[3]);
+	DebugPrint(buf);
 
 	// Get data
         for (i = 0; i < 4; i++)
@@ -469,7 +458,14 @@ void WriteRpsBridgeFile(uint Id, byte *Data)
                 mask <<= 1;
         } // for
 	fileName = nt->SCuts[0];
-	WriteBridge(fileName, switchData);
+
+	sprintf(buf, "Rps: %s %d", fileName, switchData);
+	DebugPrint(buf);
+
+	if (Data[3]) {
+		// only write while in 'nu' is on.
+		WriteBridgeInt(fileName, switchData);
+	}
 }
 
 void Write4bsBridgeFile(uint Id, byte *Data)
@@ -478,11 +474,13 @@ void Write4bsBridgeFile(uint Id, byte *Data)
 	NODE_TABLE *nt = GetTableId(Id);
 	PROFILE_CACHE *pp;
 	UNIT *pu;
-	uint rawData = *((uint *) Data);
+	//uint rawData = *((uint *) Data);
+	uint rawData = (Data[0] << 24)| (Data[1] << 16) | (Data[2] << 8) | Data[3];
 	int partialData;
 	double convertedData;
 	const uint bitMask = 0xFFFFFFFF;
 	char *fileName;
+	char buf[BUFSIZ];
 #define SIZE_MASK(n) (bitMask >> (32 - (n)))
 
 	if (nt == NULL) {
@@ -498,9 +496,21 @@ void Write4bsBridgeFile(uint Id, byte *Data)
 	pu = &pp->Unit[0];
 	for(i = 0; i < nt->SCCount; i++) {
 		fileName = nt->SCuts[i];
-		partialData = (rawData << pu->FromBit) & SIZE_MASK(pu->SizeBit);
-		convertedData = partialData * pu->Slope + pu->Offset;
+		partialData = (rawData >> pu->FromBit) & SIZE_MASK(pu->SizeBit);
+		convertedData = (double) partialData * pu->Slope + pu->Offset;
 		WriteBridge(fileName, convertedData);
+		
+		sprintf(buf, "4bs: %s %3.2lf", fileName, convertedData);
+		DebugPrint(buf);
+#if DEBUGP
+		printf("%d:raw=%08X,from=%d,sz=%d,mask=%08X\n",
+		       i, rawData,
+		       pu->FromBit, pu->SizeBit, SIZE_MASK(pu->SizeBit));
+
+		printf("%d:%s,raw=%08X,data=%d,out=%3.2lf,slope=%3.2lf,off=%3.2lf\n",
+		       i, nt->SCuts[i], rawData, partialData, convertedData,
+		       pu->Slope, pu->Offset);
+#endif
 		pu++;
 	}
 #undef SIZE_MASK

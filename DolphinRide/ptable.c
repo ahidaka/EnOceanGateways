@@ -44,7 +44,7 @@ typedef struct _tagname {
 	char *value;
 } TAGNAME;
 
-#define FIELD_SIZE 128
+#define FIELD_SIZE 256
 #define EEP_SIZE 512
 
 static TAGNAME TagTable[] = {
@@ -118,7 +118,8 @@ int debug = 0;
 #define _D if (debug > 0)
 
 //
-void StringCopy(char **dst, char *src)
+//inline void StringCopy(char **dst, char *src)
+void StringCopy(char **dst, char *src)  
 {
 	if (*dst != NULL) {
 		free((void *) *dst);
@@ -132,7 +133,8 @@ void StringCopy(char **dst, char *src)
 	}
 }
 
-void IntegerCopy(int *dst, char *src)
+//inline void IntegerCopy(int *dst, char *src)
+void IntegerCopy(int *dst, char *src)  
 {
 	if (dst != NULL && src != NULL)
 		*dst = (int) strtol(src, NULL, 10);
@@ -167,6 +169,7 @@ void SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DAT
 	int tableSize;
 	DATAFIELD *table = NULL;
 	DATAFIELD *pt;
+	char *pp;
 	int i;
 
 	_D printf("SaveEep: %d <%s><%s><%s>\n",
@@ -175,21 +178,12 @@ void SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DAT
 	Table->Size = FieldCount;
 	strcpy(Table->Eep, EepString);
 	if (Title != NULL && *Title != '\0') {
-		int len = strlen(Title);
-		char *p;
-		
 		Table->Title = strdup(Title);
-		p = Table->Title;
-		for(i = 0; i < len; i++) {
-			// supress ',' in title desc.
-			if (*p == ',' || IsTerminator(*p)) {
-				*p = ' ';
-			}
-			p++;
-		}
-		
 		if (Table->Title == NULL) {
 			Warn("Title: strdup() error");
+		}
+		while((pp = strchr(Table->Title, ',')) != NULL) {
+			*pp = '-';
 		}
 	}
 	else Table->Title = "";
@@ -203,8 +197,8 @@ void SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DAT
 		}
 		memset(table, 0, tableSize);
 	}
-	_DD printf("%s: sz=%zu c=%d t=%d\n",
-		  EepString, sizeof(DATAFIELD), FieldCount, tableSize);
+	_DD printf("%s: sz=%u c=%d t=%d\n",
+		   EepString, (uint) sizeof(DATAFIELD), FieldCount, tableSize);
 	for(i = 0; i < FieldCount; i++) {
 		if (Pd->DataName) {
 			if (Pd->DataName) {
@@ -586,7 +580,7 @@ void PrintEepAll()
 
 	while(pe->Eep[0] != '\0' ) {
 		if (pe->Size > 0) {
-			printf("%d %s: %d\n", fcnt, pe->Eep, pe->Size);
+			printf("**%s %d %s: %d\n", __FUNCTION__, fcnt, pe->Eep, pe->Size);
 			PrintNode(pe->Dtable, pe->Size);
 		}
 		pe++, fcnt++;
@@ -624,7 +618,8 @@ int InitEep(char *Profile)
 	xmlTextReaderPtr reader;
 	int ret, count;
 	int numField;
-	static DATAFIELD D2_03_20_ES = {
+	static DATAFIELD D2_03_20_ES =
+	{
 		0,
 		"Energy Supply",
 		"ES",
@@ -637,6 +632,183 @@ int InitEep(char *Profile)
 		"", //Unit
 		{{0, NULL}}, //Enum
 	}; 
+
+	static DATAFIELD D2_32_00[4] =
+	{
+		{
+			0,
+			"Power Fail",
+			"PF",
+			0, //Bitoffs
+			1, //Bitsize
+			0, //RangeMin
+			1, //RangeMax
+			0, //ScaleMin
+			1, //ScaleMax
+			"", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			0,
+			"Divisor for all channels",
+			"DIV",
+			1, //Bitoffs
+			1, //Bitsize
+			0, //RangeMin
+			1, //RangeMax
+			0, //ScaleMin
+			1, //ScaleMax
+			"", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			0,
+			"Current value",
+			"CH",
+			8, //Bitoffs
+			12, //Bitsize
+			0, //RangeMin
+			0xFFF, //RangeMax
+			0, //ScaleMin
+			4095, //ScaleMax
+			"A", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,"","",0,0,0,0,0,0,"",{{0, NULL}},
+		}
+	};						
+
+	static DATAFIELD D2_32_01[5] =
+	{
+		{
+			0,
+			"Power Fail",
+			"PF",
+			0, //Bitoffs
+			1, //Bitsize
+			0, //RangeMin
+			1, //RangeMax
+			0, //ScaleMin
+			1, //ScaleMax
+			"", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			0,
+			"Divisor for all channels",
+			"DIV",
+			1, //Bitoffs
+			1, //Bitsize
+			0, //RangeMin
+			1, //RangeMax
+			0, //ScaleMin
+			1, //ScaleMax
+			"", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			0,
+			"Current value",
+			"CH",
+			8, //Bitoffs
+			12, //Bitsize
+			0, //RangeMin
+			0xFFF, //RangeMax
+			0, //ScaleMin
+			4095, //ScaleMax
+			"A", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			0,
+			"Current value",
+			"CH",
+			20, //Bitoffs
+			12, //Bitsize
+			0, //RangeMin
+			0xFFF, //RangeMax
+			0, //ScaleMin
+			4095, //ScaleMax
+			"A", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,"","",0,0,0,0,0,0,"",{{0, NULL}},
+		}
+	};						
+
+	static DATAFIELD D2_32_02[6] =
+	{
+		{
+			0,
+			"Power Fail",
+			"PF",
+			0, //Bitoffs
+			1, //Bitsize
+			0, //RangeMin
+			1, //RangeMax
+			0, //ScaleMin
+			1, //ScaleMax
+			"", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			0,
+			"Divisor for all channels",
+			"DIV",
+			1, //Bitoffs
+			1, //Bitsize
+			0, //RangeMin
+			1, //RangeMax
+			0, //ScaleMin
+			1, //ScaleMax
+			"", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			0,
+			"Current value",
+			"CH",
+			8, //Bitoffs
+			12, //Bitsize
+			0, //RangeMin
+			0xFFF, //RangeMax
+			0, //ScaleMin
+			4095, //ScaleMax
+			"A", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			0,
+			"Current value",
+			"CH",
+			20, //Bitoffs
+			12, //Bitsize
+			0, //RangeMin
+			0xFFF, //RangeMax
+			0, //ScaleMin
+			4095, //ScaleMax
+			"A", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			0,
+			"Current value",
+			"CH",
+			32, //Bitoffs
+			12, //Bitsize
+			0, //RangeMin
+			0xFFF, //RangeMax
+			0, //ScaleMin
+			4095, //ScaleMax
+			"A", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,"","",0,0,0,0,0,0,"",{{0, NULL}},
+		}
+	};						
 
 	EepTable = malloc(sizeof(EEP_TABLE) * EEP_SIZE);
 	if (!EepTable) {
@@ -675,6 +847,18 @@ int InitEep(char *Profile)
 	SaveEep(&EepTable[count++], 1, "D2-03-20",
 		"Beacon with Vibration Detection",
 		&D2_03_20_ES); //Add Custom "D2-03-20",
+
+	SaveEep(&EepTable[count++], 3, "D2-32-00",
+		"A.C. Current Clamp",
+		&D2_32_00[0]);
+
+	SaveEep(&EepTable[count++], 4, "D2-32-01",
+		"A.C. Current Clamp",
+		&D2_32_01[0]);
+
+	SaveEep(&EepTable[count++], 5, "D2-32-02",
+		"A.C. Current Clamp",
+		&D2_32_02[0]);
 
 	SaveEep(&EepTable[count], 0, "\0", "\0", NULL); //Add end if table mark
 

@@ -1,26 +1,19 @@
 #
 
-TARGET = dpride dptest eotest ptable profiler
+TARGET = dpride ptable
 
 IFLAGS = -I/usr/include/libxml2
 CFLAGS = -g -Wall $(IFLAGS)
 
 all: $(TARGET)
 
-dpride: dpride.o ptable.o control.o
-	gcc $(CFLAGS) dpride.o ptable.o control.o -o dpride -lxml2
+dpride: dpride.o ptable.o control.o serial.o esp3.o
+	gcc $(CFLAGS) dpride.o esp3.o ptable.o control.o serial.o -o dpride -lpthread -lxml2
 
 ptable: ptable.c ptablemain.c ptable.h
 	gcc $(CFLAGS) ptable.c ptablemain.c -o ptable -lxml2
 
-dptest: dptest.c
-	gcc $(CFLAGS) -o dptest dptest.c
-
-eotest: eotest.c
-	gcc $(CFLAGS) -o eotest eotest.c ptable.c control.c -lxml2
-
-#dpride.o: dprode.c dpride.h ptable.h
-dpride.o: dpride.c dpride.h ptable.h
+dpride.o: dpride.c dpride.h ptable.h serial.h esp3.h
 	gcc $(CFLAGS) -c dpride.c
 
 ptable.o: ptable.c dpride.h ptable.h
@@ -29,15 +22,13 @@ ptable.o: ptable.c dpride.h ptable.h
 control.o: control.c dpride.h
 	gcc $(CFLAGS) -c control.c
 
-comma.c: ptable.h dpride.h
+serial.o: serial.c serial.h esp3.h
+	gcc $(CFLAGS) -c serial.c
+
+esp3.o: esp3.c esp3.h
+	gcc $(CFLAGS) -c esp3.c
 
 ptablemain.c: ptable.h
-
-
-scn: scn.c dpride.h
-	gcc $(CFLAGS) -o scn scn.c
-
-profiler:
 
 clean:
 	/bin/rm -f *.o *~ $(TARGET)

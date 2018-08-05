@@ -27,9 +27,14 @@ typedef struct _eo_control
 	EO_FILE_OP FilterOp;
         int Debug;
 	int ControlCount;
+	int ERP1gw;
         char *ControlFile;
 	char *ControlPath;
-        char *FilterFile;
+        char *CommandFile;
+	char *CommandPath;
+        char *BrokerFile;
+        char *BrokerPath;
+	char *PidPath;
         char *EEPFile;
         char *BridgeDirectory;
         char *ESPPort;
@@ -54,6 +59,7 @@ typedef struct _eo_port
 typedef enum _eo_packet_type
 {
         Radio = 0x01,
+        RadioErp1 = 0x01,
         Response = 0x02,
         RadioSubTel = 0x03,
         Event = 0x04,
@@ -73,6 +79,8 @@ typedef enum _eo_packet_type
 #define Error(msg)  fprintf(stderr, "*ERR %s: %s\n", __FUNCTION__, msg)
 #define Error2(msg)  fprintf(stderr, "*ERR %s: %s=%s\n", __FUNCTION__, msg, arg)
 
+void CleanUp(int Signum);
+
 void DebugPrint(char *s);
 
 void USleep(int Usec);
@@ -83,32 +91,8 @@ int EoReadControl();
 
 void EoClearControl();
 
-bool EoApplyFilter();
-
-void EoSetFilter(bool enable);
-
-bool EoPortOpen();
-
-bool EoPortWrite(byte * Buffer, int Offset, int Length);
-
-bool EoGetHeader(EO_PACKET_TYPE *outPacketType, int *outDataLength, int *outOptionLength);
-
-int EoGetBody(EO_PACKET_TYPE PacketType, int DataLength, int OptionLength,
-              byte *Id, byte *Erp2Hdr, byte *Data, byte *Option);
-
-bool EoGetResponse(int *Code);
-
-void FilterAddId(uint id);
-
-void FilterClear();
-
-void FilterEnable();
-
-
-byte Crc8CheckEx(byte *data, size_t offset, size_t count);
-
-byte Crc8Check(byte *data, size_t count);
-
+//
+//
 void EoParameter(int ac, char**av, EO_CONTROL *p);
 
 void EoSetEep(EO_CONTROL *P, byte *Id, byte *Data, uint Rorg);
@@ -123,15 +107,19 @@ char *GetNewName(char *Target);
 
 int ReadCsv(char *Filename);
 
+int ReadCmd(char *Filename, int *Mode, char *Param);
+
 uint GetId(int Index);
 
 void WriteRpsBridgeFile(uint Id, byte *Data);
 
+void Write1bsBridgeFile(uint Id, byte *Data);
+
 void Write4bsBridgeFile(uint Id, byte *Data);
 
-void WriteBridge(char *FileName, double ConvertedData);
+void WriteVldBridgeFile(uint Id, byte *Data);
 
-void WriteBridgeInt(char *FileName, int Data);
+void WriteBridge(char *FileName, double ConvertedData);
 
 static inline void DataToEep(byte *data, uint *pFunc, uint *pType, uint *pMan)
 {
@@ -153,7 +141,6 @@ static inline uint StrToId(byte str[4])
 
 static inline uint ByteToId(byte Bytes[4])
 {
-        return(*((uint *) Bytes));
+        //return(*((uint *) Bytes));
+        return((Bytes[0] << 24) |(Bytes[1] << 16) | (Bytes[2] << 8) | Bytes[3]);
 }
-
-#define IsTerminator(c) ((c) == '\n' || (c) == '\r' || (c) == '\0' || (c) == '#')

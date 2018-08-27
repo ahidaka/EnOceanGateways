@@ -11,6 +11,8 @@ Verion 1.00 releases notes.
  Use signal SIG_BROKERS (SIGRTMIN + 6) to notify brokers immediately. 
  Receive signal SIGUSR2 to get external command while in working.
 
-You can see how to make brokers at https://github.com/ahidaka/Open62541-Work.
+Verion 1.01 releases notes.
+ Fix 4BS telegram analysys and internal EEP cache management.
 
+You can see how to make brokers at https://github.com/ahidaka/Open62541-Work.
 

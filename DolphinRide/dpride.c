@@ -20,8 +20,8 @@
 #include "serial.h"
 #include "esp3.h"
 
-static const char copyright[] = "\n(c) 2017 Device Drivers, Ltd.\n";
-static const char version[] = "\n@ dpride Version 1.00\n";
+static const char copyright[] = "\n(c) 2017 Device Drivers, Ltd. \n";
+static const char version[] = "\n@ dpride Version 1.01 \n";
 
 #define EO_ESP_PORT_USB "/dev/ttyUSB0"
 #define EO_ESP_PORT_S0 "/dev/ttyS0"
@@ -647,8 +647,11 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
         char *eepFile = EO_EEP_FILE;
         char *serialPort = "\0";
 
-        while ((opt = getopt(ac, av, "mrocvf:d:t:e:s:z:")) != EOF) {
+        while ((opt = getopt(ac, av, "Dmrocvf:d:t:e:s:z:")) != EOF) {
                 switch (opt) {
+                case 'D': //Monitor mode
+                        p->Debug++;
+                        break;
                 case 'm': //Monitor mode
                         mFlags++;
                         rFlags = oFlags = 0;
@@ -1234,7 +1237,8 @@ bool MainJob(BYTE *Buffer)
 			break;
 		}
 	}
-	PrintItems(); //// DEBUG
+	if (p->Debug > 2)
+		PrintItems();
 
 	return TRUE;
 }
@@ -1274,7 +1278,7 @@ int main(int ac, char **av)
 	memset(EoFilterList, 0, sizeof(long) * EO_FILTER_SIZE);
 
 	p->Mode = Monitor; // Default mode
-	p->Debug = true; // for Debug
+	//p->Debug = true; // for Debug
 
 	EoParameter(ac, av, p);
 	p->PidPath = MakePath(p->BridgeDirectory, PID_FILE);
@@ -1470,18 +1474,24 @@ int main(int ac, char **av)
 
 			if (newMode == 'M' /*Monitor*/) {
 				/* Now! need debug */
+				if (p->Debug > 0)
+					printf("cmd:Monitor\n");
 				p->Mode = Monitor;
 				CO_WriteFilterDelAll();
 				CO_WriteFilterEnable(OFF);
 			}
 			else if (newMode == 'R' /*Register*/) {
 				/* Now! need debug */
+				if (p->Debug > 0)
+					printf("cmd:Register\n");
 				p->Mode = Register;
 				CO_WriteFilterEnable(OFF);
 				/* Now! Enable Teach IN */
 			}
 			else if (newMode == 'C' /*Clear and Register*/) {
 				/* Now! need debug */
+				if (p->Debug > 0)
+					printf("cmd:Clear and Register\n");
 				EoClearControl();
 				CO_WriteFilterDelAll();
 				CO_WriteFilterEnable(OFF);
@@ -1491,6 +1501,8 @@ int main(int ac, char **av)
 				p->Mode = Register;
 			}
 			else if (newMode == 'O' /* Operation */) {
+				if (p->Debug > 0)
+					printf("cmd:Operation\n");
 				p->Mode = Operation; 
 				p->FilterOp = Read;
 				p->ControlCount = EoReadControl();

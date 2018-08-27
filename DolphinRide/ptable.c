@@ -141,6 +141,13 @@ void IntegerCopy(int *dst, char *src)
 	else *dst = 0;
 }
 
+void FloatCopy(float *dst, char *src)
+{
+	if (dst != NULL && src != NULL)
+		*dst = atof(src);
+	else *dst = 0.0F;
+}
+
 int HexTrim(char *dst, char *src)
 {
         int i;
@@ -396,7 +403,7 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
 				    //this field is reserved
 				    continue;
 			    }
-			    _D printf("%d[%s]:%s ofs=%d siz=%d rmin=%d rmax=%d smin=%d smax=%d u=%s\n",
+			    _D printf("%d[%s]:%s ofs=%d siz=%d rmin=%d rmax=%d smin=%.3f smax=%.3f u=%s\n",
 				   i,
 				   pd->DataName,
 				   pd->ShortCut,
@@ -448,8 +455,8 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
 			    IntegerCopy(&pd->BitSize, TagTable[TAG_BITSIZE].value);
 			    IntegerCopy(&pd->RangeMin, RangeMin);
 			    IntegerCopy(&pd->RangeMax, RangeMax);
-			    IntegerCopy(&pd->ScaleMin, ScaleMin);
-			    IntegerCopy(&pd->ScaleMax, ScaleMax);
+			    FloatCopy(&pd->ScaleMin, ScaleMin);
+			    FloatCopy(&pd->ScaleMax, ScaleMax);
 			    StringCopy(&pd->Unit, TagTable[TAG_UNIT].value);
 
 			    if (EnumTableIndex > 0 && EnumTable[0].Desc != NULL) {
@@ -563,7 +570,7 @@ void PrintNode(DATAFIELD *pd, int Size)
 
 	for(i = 0; i < Size; i++) {
 		if (pd->DataName)
-			printf(" %s:%s %d %d %d %d %d %d  %s\n",
+			printf(" %s:%s %d %d %d %d %.3f %.3f  %s\n",
 			       pd->DataName, pd->ShortCut,
 			       pd->BitOffs, pd->BitSize,
 			       pd->RangeMin, pd->RangeMax,

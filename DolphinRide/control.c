@@ -43,7 +43,7 @@ typedef struct _unit {
 typedef struct _profile_cache {
         union _eep {
                 char String[8];
-                ULONG Key;
+                UINT64 Key;
         }  Eep;
 	UINT Padding;
 
@@ -291,7 +291,7 @@ PROFILE_CACHE *GetCache(char *Eep)
 {
 	int i;
 	PROFILE_CACHE *pp = &CacheTable[0];
-        ULONG *eepKey = (ULONG *) Eep;
+        UINT64 *eepKey = (UINT64 *) Eep;
 
         for(i = 0; i < NODE_TABLE_SIZE; i++) {
                 if (*eepKey == pp->Eep.Key) {
@@ -347,7 +347,7 @@ int AddCache(char *Eep)
 		// not found
 		return 0;
 	}
-	pp->Eep.Key = *((ULONG *) pe->Eep);
+	pp->Eep.Key = *((UINT64 *) pe->Eep);
 	pp->Padding = 0;
 	pu = &pp->Unit[0];
 	pd = &pe->Dtable[0];
@@ -629,8 +629,7 @@ void Write4bsBridgeFile(uint Id, byte *Data)
 	NODE_TABLE *nt = GetTableId(Id);
 	PROFILE_CACHE *pp;
 	UNIT *pu;
-	uint rawData = *((uint *) Data);
-	//uint rawData = Data[0] << 24 | Data[1] << 16 | Data[2] << 8 | Data[3];
+	uint rawData = (Data[0]<<24) | (Data[1]<<16) | (Data[2]<<8) | Data[3];
 	int partialData;
 	double convertedData;
 	const uint bitMask = 0xFFFFFFFF;
@@ -653,8 +652,7 @@ void Write4bsBridgeFile(uint Id, byte *Data)
 	pu = &pp->Unit[0];
 	for(i = 0; i < nt->SCCount; i++) {
 		fileName = nt->SCuts[i];
-		//partialData = (rawData << pu->FromBit) & SIZE_MASK(pu->SizeBit);
-		partialData = (rawData >> pu->FromBit) & SIZE_MASK(pu->SizeBit);
+		partialData = (rawData >> (31 - (pu->FromBit + pu->SizeBit - 1))) & SIZE_MASK(pu->SizeBit);
 		convertedData = partialData * pu->Slope + pu->Offset;
 
 		//printf("****%s:R=%u PD=%d fr=%u sz=%u sl=%.2lf of=%.2lf dt=%.2lf\n",
@@ -838,7 +836,7 @@ void PrintProfileAll()
 			pu++;
 		}
 		pp++;
-		if (pp->Eep.Key == 0)
+		if (pp->Eep.Key == 0ULL)
 			break;
 	}
 }

@@ -21,8 +21,8 @@ typedef struct _datafield
         int BitSize;
         int RangeMin;
         int RangeMax;
-        int ScaleMin;
-        int ScaleMax;
+        float ScaleMin;
+        float ScaleMax;
         char *Unit;
         ENUMTABLE EnumDesc[ENUM_SIZE];
 } DATAFIELD;

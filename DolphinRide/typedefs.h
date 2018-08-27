@@ -40,5 +40,6 @@ typedef long LONG;
 typedef unsigned long ULONG;
 typedef float FLOAT;
 typedef double DOUBLE;
+typedef unsigned long long UINT64;
 
 #endif

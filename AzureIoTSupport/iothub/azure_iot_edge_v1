@@ -1,0 +1,6 @@
+#!/bin/sh
+
+cd /home/hidaka/github/iot-edge-v1/v1/build
+./samples/simulated_device_cloud_upload/simulated_device_cloud_upload_sample \
+ /var/tmp/dpride/.iotx/sim.json &
+

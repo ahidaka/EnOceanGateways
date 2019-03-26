@@ -1,0 +1,18 @@
+#!/bin/sh
+
+case "$1" in
+ "create") echo Create;;
+ "delete") echo Delete;;
+ "list")   echo List;;
+  * )
+   echo 'usage: iothubman create <deviceID>'
+   echo '       iothubman delete <deviceID>'
+   echo '       iothubman list'
+   echo ' note: cs(Connection String) should be provided at cs file'
+   exit 0
+   ;;
+esac
+
+iothub_registrymanager_sample $1 -l `cat /var/tmp/dpride/.iotx/cs` $2
+
+#end

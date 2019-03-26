@@ -1,7 +1,7 @@
 # EnOceanGateways
 EnOcean Gateways
 
-DolphinRide (dpride) -- The basic EnOcean gateway.
+## DolphinRide (dpride) -- The basic EnOcean gateway.
 Note: Need eep.xml (from DolphinView) in your woring directory.
 
 Verion 1.00 releases notes.
@@ -16,3 +16,12 @@ Verion 1.01 releases notes.
 
 You can see how to make brokers at https://github.com/ahidaka/Open62541-Work.
 
+## AzureSupport -- The tools to support Microsoft Azure IoT Hub connection.
+
+Add Microsoft Azure Support tools at [AzureIoTSupport](/AzureIoTSupport/).
+
+
+### de:code 2019
+de:code 2019 サポートソフトウェアは [DolphinRide](/DolphinRide/) と [AzureIoTSupport](/AzureIoTSupport/) 以下にあります。
+
+&copy; 2017-2019 Atomu Hidaka  All rights reserved.

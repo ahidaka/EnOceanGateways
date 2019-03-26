@@ -1,0 +1,1 @@
+./PrimeNumber -f 1800 -t 3000 | shuf -n 1

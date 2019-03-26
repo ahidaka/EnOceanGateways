@@ -1,0 +1,15 @@
+#!/bin/sh
+
+if [ "$1" = "" ]; then
+   echo 'usage: iothubadd <domain>'
+   exit 0
+fi
+
+ADDLIST=/var/tmp/dpride/s.addlist
+
+iothub_registrymanager_sample list -l `cat /var/tmp/dpride/.iotx/cs` | pointaddlist.awk -v domain="$1" > "${ADDLIST}"
+
+for newnode in $( cat ${ADDLIST} ); do
+    ##  echo iothubman create "${newnode}"
+    iothubman create "${newnode}"
+done

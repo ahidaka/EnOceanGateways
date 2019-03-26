@@ -1,0 +1,56 @@
+{
+  "modules": [
+    {
+      "name": "IotHub",
+      "loader": {
+        "name": "native",
+        "entrypoint": {
+          "module.path": "./modules/iothub/libiothub.so"
+        }
+      },
+      "args": {
+        "IoTHubName": "<<IoTHubName>>",
+        "IoTHubSuffix": "<<IoTHubSuffix>>",
+        "Transport": "HTTP",
+        "RetryPolicy": "EXPONENTIAL_BACKOFF_WITH_JITTER"
+      }
+    },
+    {
+      "name": "mapping",
+      "loader": {
+        "name": "native",
+        "entrypoint": {
+          "module.path": "./modules/identitymap/libidentity_map.so"
+        }
+      },
+      "args": [
+      ]
+    },
+    {
+      "name": "Logger",
+      "loader": {
+        "name": "native",
+        "entrypoint": {
+          "module.path": "./modules/logger/liblogger.so"
+        }
+      },
+      "args": {
+        "filename": "deviceCloudUploadGatewaylog.log"
+      }
+    }
+  ],
+  "links": [
+    {
+      "source": "*",
+      "sink": "Logger"
+    },
+    {
+      "source": "mapping",
+      "sink": "IotHub"
+    },
+    {
+      "source": "IotHub",
+      "sink": "mapping"
+    }
+  ]
+}

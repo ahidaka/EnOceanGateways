@@ -3,9 +3,30 @@
 #pragma once
 
 typedef unsigned char byte;
+#ifndef bool
 typedef int bool;
+#endif
+#ifndef uint
 typedef unsigned int uint;
+#endif
+#ifndef false
 enum _boolvalue { false = 0, true = 1};
+#endif
+#define MAX_SUFFIX 999
+
+#define EO_ESP_PORT_USB "/dev/ttyUSB0"
+#define EO_ESP_PORT_S0 "/dev/ttyS0"
+#define EO_ESP_PORT_AMA0 "/dev/ttyAMA0"
+#define EO_DIRECTORY "/var/tmp/dpride"
+#define EO_CONTROL_FILE "eofilter.txt"
+#define EO_COMMAND_FILE "eoparam.txt"
+#define EO_EEP_FILE "eep.xml"
+#define EO_FILTER_SIZE (128)
+
+#define BROKER_FILE "brokers.txt"
+#define MAX_BROKER (16)
+#define PID_FILE "dpride.pid"
+#define SIG_BROKERS (SIGRTMIN + 6)
 
 //
 typedef enum _eo_file_op
@@ -23,6 +44,7 @@ typedef struct _eo_control
         EO_MODE Mode;
         int CFlags;
         int VFlags;
+        int Logger;
         int Timeout;
 	EO_FILE_OP FilterOp;
         int Debug;
@@ -97,7 +119,7 @@ void EoParameter(int ac, char**av, EO_CONTROL *p);
 
 void EoSetEep(EO_CONTROL *P, byte *Id, byte *Data, uint Rorg);
 
-void PrintTelegram(EO_PACKET_TYPE packetType, byte *id, byte erp2hdr, byte *data);
+//void PrintTelegram(EO_PACKET_TYPE packetType, byte *id, byte erp2hdr, byte *data);
 
 bool CheckTableId(uint Target);
 
@@ -119,7 +141,9 @@ void Write4bsBridgeFile(uint Id, byte *Data);
 
 void WriteVldBridgeFile(uint Id, byte *Data);
 
-void WriteBridge(char *FileName, double ConvertedData);
+void WriteBridge(char *FileName, double ConvertedData, char *Unit);
+
+void LogMessageStart(uint Id, char *Eep);
 
 static inline void DataToEep(byte *data, uint *pFunc, uint *pType, uint *pMan)
 {
@@ -131,16 +155,36 @@ static inline void DataToEep(byte *data, uint *pFunc, uint *pType, uint *pMan)
         if (pMan) *pMan = manID;
 }
 
-static inline uint StrToId(byte str[4])
-{
-        char buf[8];
-        *((uint *)buf) = *((uint *)&str[0]);
-        *((uint *)&buf[4]) = 0UL;
-        return(strtoul(buf, NULL, 16));
-}
+//static inline uint StrToId(byte str[4])
+//{
+//        char buf[8];
+//        *((uint *)buf) = *((uint *)&str[0]);
+//        *((uint *)&buf[4]) = 0UL;
+//        return(strtoul(buf, NULL, 16));
+//}
 
 static inline uint ByteToId(byte Bytes[4])
 {
         //return(*((uint *) Bytes));
         return((Bytes[0] << 24) |(Bytes[1] << 16) | (Bytes[2] << 8) | Bytes[3]);
+}
+
+static inline void IdToByte(char *p, unsigned int id)
+{
+        const unsigned int mask = 0xF;
+        const char chars[16] = {'0','1','2','3','4','5','6','7','8','9',
+				'A','B','C','D','E','F'};
+#define mkchar(n, shift) ( chars[ (((n) >> (shift)) & mask) ])
+        if (p) {
+                *p++ = mkchar(id, 28);
+                *p++ = mkchar(id, 24);
+                *p++ = mkchar(id, 20);
+                *p++ = mkchar(id, 16);
+                *p++ = mkchar(id, 12);
+                *p++ = mkchar(id, 8);
+                *p++ = mkchar(id, 4);
+                *p++ = mkchar(id, 0);
+                *p = '\0';
+        }
+#undef mkchar
 }

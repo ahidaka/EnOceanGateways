@@ -12,17 +12,24 @@
 extern BYTE Crc8Check(BYTE *data, size_t count);
 
 static INT _GetPacketDebug = 0;
-#define _DEBUG if (_GetPacketDebug > 0) 
+#define _DEBUG if (_GetPacketDebug > 1) 
 
 //
-void PacketDump(BYTE *p)
+VOID PacketDebug(INT flag)
 {
-	printf("%02X %02X %02X %02X %02X %02X %02X %02X  ",
-	       p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
-	printf("%02X %02X %02X %02X %02X %02X %02X %02X ",
-	       p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]);
-	printf("%02X %02X %02X %02X %02X %02X %02X %02X\n",
-	       p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23]);
+	_GetPacketDebug = flag;
+}
+
+VOID PacketDump(BYTE *p)
+{
+	if (_GetPacketDebug > 0) {
+		printf("%02X %02X %02X %02X %02X %02X %02X %02X  ",
+		       p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+		printf("%02X %02X %02X %02X %02X %02X %02X %02X ",
+		       p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]);
+		printf("%02X %02X %02X %02X %02X %02X %02X %02X\n",
+		       p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23]);
+	}
 }
 
 //
@@ -95,7 +102,7 @@ STATES_GET_PACKET;
 			//OK
 		}
 		else {
-			printf("*** Read error=%d (%d) (%d)\n",
+			fprintf(stderr, "*** Read error=%d (%d) (%d)\n",
 			       readLength, errno, Fd);
 			perror("*** ERRNO");
 			continue;
@@ -121,8 +128,8 @@ STATES_GET_PACKET;
 			_DEBUG printf("*** CHECK_CRC8H=%d\n", count);
 			crc = Crc8Check(line, HEADER_BYTES);
 			if (crc != rxByte) {
-				printf("*** CRC8H ERROR %02X:%02X\n", crc, rxByte);
-				printf("*** %02X %02X %02X %02X %02X\n",
+				fprintf(stderr, "*** CRC8H ERROR %02X:%02X\n", crc, rxByte);
+				fprintf(stderr, "*** %02X %02X %02X %02X %02X\n",
 				       line[0], line[1], line[2], line[3], line[4]);
 
 				a = -1;
@@ -180,7 +187,7 @@ STATES_GET_PACKET;
 				dataBuffer[count] = rxByte;
 			}
 			else {
-				printf("*** dataError=%d %d\n", count, BufferLength);
+				fprintf(stderr, "*** dataError=%d %d\n", count, BufferLength);
 			}
 
 			if (++count == (dataLength + optionLength)) {

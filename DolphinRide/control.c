@@ -110,6 +110,12 @@ int GetTableIndex(uint Target)
 	return (targetNT == NULL ? -1 : targetNT - nt);
 }
 
+char *GetTableEep(uint Target)
+{
+	NODE_TABLE *nt = GetTableId(Target);
+	return (nt == NULL ? NULL : nt->Eep);
+}
+
 bool CheckTableEep(char *Target)
 {
 	bool collision = false;
@@ -151,7 +157,7 @@ char *GetNewName(char *Target)
 		// Find collision
 		origName = Target;
 		Target = NULL; // Clear for new Name
-		for(suffix = 1; suffix <= 99; suffix++) {
+		for(suffix = 1; suffix <= MAX_SUFFIX; suffix++) {
 			newName = MakeNewName(origName, suffix);
 			if (!CheckTableEep(newName)) {
 				Target = newName;
@@ -178,8 +184,6 @@ char *DeBlank(char *p)
 	while(isblank(*p)) {
 		p++;
 	}
-
-
 	return p;
 }
 
@@ -240,6 +244,8 @@ int DecodeLine(char *Line, uint *Id, char **Eep, char **Desc, char ***SCuts)
 
 	p = GetItem(DeBlank(Line), &item);
 	if (p == NULL || IsTerminator(*p) || *p == ',') {
+		if (item)
+			free(item);
 		return 0;
 	}
 	//printf("**0: <%s><%s>\n", item, p);  //DEBUG
@@ -251,28 +257,38 @@ int DecodeLine(char *Line, uint *Id, char **Eep, char **Desc, char ***SCuts)
 	}
 	p = GetItem(p, &item);
 	if (p == NULL || IsTerminator(*p) || *p == ',') {
+		if (item)
+			free(item);
 		return 0;
 	}
 	*Eep = item;
 
 	if ((p = CheckNext(p)) == NULL) {
 		Error("cannot read Desc item");
+                if (item)
+                        free(item);
 		return 0;
 	}
 	p = GetItem(p, &item);
 	if (p == NULL || IsTerminator(*p) || *p == ',') {
+		if (item)
+			free(item);
 		return 0;
 	}
 	*Desc = item;
 
 	if ((p = CheckNext(p)) == NULL) {
 		Error("cannot read SCut first item");
+		if (item)
+                        free(item);
 		return 0;
 	}
 
 	for(i = 0; i < SC_SIZE; i++) {
 		p = GetItem(p, &item);
 		if (p == NULL) {
+			if (item)
+				free(item);
 			break;
 		}
 		scTable[i] = item;
@@ -407,6 +423,10 @@ int ReadCsv(char *Filename)
 		}
 		scCount = DecodeLine(buf, &id, &eep, &desc, &scs);
 		if (scCount > 0) {
+			if (nt->SCuts) {
+				//purge old shortcuts
+				; ////free(nt->SCuts);
+			}
 			nt->Id = id;
 			nt->Eep = eep;
 			nt->Desc = desc;
@@ -513,9 +533,7 @@ void WriteRpsBridgeFile(uint Id, byte *Data)
 	UNIT *pu;
 	char *fileName;
 	BYTE rawData;
-	//uint mask = 1;
 	BYTE switchData = 0;
-	//const uint bitMask = 0xFFFFFFFF;
 	
 	if (nt == NULL) {
 		Error("cannot find id");
@@ -527,6 +545,8 @@ void WriteRpsBridgeFile(uint Id, byte *Data)
 		return;
 	}
 	
+	LogMessageStart(Id, pp->Eep.String);
+	
         //F6-02-04
 	if (!strcmp(pp->Eep.String, "F6-02-04")) {
 		pu = &pp->Unit[0];
@@ -534,9 +554,9 @@ void WriteRpsBridgeFile(uint Id, byte *Data)
 		for(i = 0; i < nt->SCCount; i++) {
 			fileName = nt->SCuts[i];
 			switchData = (rawData >> pu->FromBit) & (0x01);
-			WriteBridge(fileName, switchData);
-			//printf("*%d: %s.%s=%d (%02X)\n", i,
-			//       fileName, pu->SCut, switchData, rawData);
+			WriteBridge(fileName, switchData, "\0");
+			printf("*%d: %s.%s=%d (%02X)\n", i,
+			       fileName, pu->SCut, switchData, rawData);
 			pu++;
 		}
 	}
@@ -579,9 +599,9 @@ void WriteRpsBridgeFile(uint Id, byte *Data)
 				switchData = nu ? 0 :sa;
 				break;
 			}
-			WriteBridge(fileName, switchData);
-			//printf("*%d: %s.%s=%d (%02X %02X)\n", i,
-			//       fileName, pu->SCut, switchData, Data[0], Data[1]);
+			WriteBridge(fileName, switchData, "\0");
+			printf("*%d: %s.%s=%d (%02X %02X)\n", i,
+			       fileName, pu->SCut, switchData, Data[0], Data[1]);
 			pu++;
 		}
 		
@@ -608,6 +628,8 @@ void Write1bsBridgeFile(uint Id, byte *Data)
 		Error("cannot find EEP");
 		return;
 	}
+	
+	LogMessageStart(Id, pp->Eep.String);
 
         //D5-00-01
 	pu = &pp->Unit[0];
@@ -615,8 +637,7 @@ void Write1bsBridgeFile(uint Id, byte *Data)
 	for(i = 0; i < nt->SCCount; i++) {
 		fileName = nt->SCuts[i];
 		switchData = rawData & 0x01;
-		printf("*****Raw=%08X, switch=%d\n", rawData, switchData);
-		WriteBridge(fileName, switchData);
+		WriteBridge(fileName, switchData, "\0");
 		//printf("*%d: %s.%s=%d (%02X)\n", i,
 		//       fileName, pu->SCut, switchData, rawData);
 		pu++;
@@ -649,6 +670,8 @@ void Write4bsBridgeFile(uint Id, byte *Data)
 		return;
 	}
 
+	LogMessageStart(Id, pp->Eep.String);
+
 	pu = &pp->Unit[0];
 	for(i = 0; i < nt->SCCount; i++) {
 		fileName = nt->SCuts[i];
@@ -659,7 +682,7 @@ void Write4bsBridgeFile(uint Id, byte *Data)
 		//       fileName, rawData, partialData, pu->FromBit, pu->SizeBit,
 		//       pu->Slope, pu->Offset, convertedData);
 
-		WriteBridge(fileName, convertedData);
+		WriteBridge(fileName, convertedData, pu->Unit);
 
 		//printf("*%d: %s.%s=%d/%.2lf,f=%d z=%d s=%.2lf o=%.2lf\n", i,
 		//       fileName, pu->SCut, partialData, convertedData,
@@ -699,6 +722,8 @@ void WriteVldBridgeFile(uint Id, byte *Data)
 		return;
 	}
 
+	LogMessageStart(Id, pp->Eep.String);
+
 	// Examine the total byte counts in VLD data packet
 	maxBitOffset = 0;
 	pu = &pp->Unit[0];
@@ -737,7 +762,7 @@ void WriteVldBridgeFile(uint Id, byte *Data)
 		//printf("****%s:R=%lu PD=%lu fr=%u nw=%u sz=%u sl=%.2lf of=%.2lf dt=%.2lf\n",
 		//       fileName, rawData, partialData, pu->FromBit, newFromBit, pu->SizeBit,
 		//       pu->Slope, pu->Offset, convertedData);
-		WriteBridge(fileName, convertedData);
+		WriteBridge(fileName, convertedData, pu->Unit);
 
 		//printf("*%d: %s.%s=%lu/%.2lf,f=%u z=%u s=%.2lf o=%.2lf\n", i,
 		//       fileName, pu->SCut, partialData, convertedData,
@@ -843,9 +868,9 @@ void PrintProfileAll()
 
 #include <linux/limits.h> //PATH_MAX
 
-#define EO_DIRECTORY "/var/tmp/dpride"
-#define EO_CONTROL_FILE "eofilter.txt"
-#define EO_FILTER_SIZE (128)
+//#define EO_DIRECTORY "/var/tmp/dpride"
+//#define EO_CONTROL_FILE "eofilter.txt"
+//#define EO_FILTER_SIZE (128)
 
 typedef struct _eodata {
 	int  Index;
@@ -890,8 +915,11 @@ char *EoMakePath(char *Dir, char *File)
 
 void EoReflesh(void)
 {
-	char *fname = EoMakePath(EO_DIRECTORY, EO_CONTROL_FILE); 
-	ReadCsv(fname);
+	char *fname = EoMakePath(EO_DIRECTORY, EO_CONTROL_FILE);
+	if (fname) {
+		ReadCsv(fname);
+		////free(fname);
+	}
 }
 
 EO_DATA *EoGetDataByIndex(int Index)
@@ -921,11 +949,17 @@ EO_DATA *EoGetDataByIndex(int Index)
 		return NULL;
 	}
 	bridgePath = EoMakePath(EO_DIRECTORY, fileName);
-
-	f = fopen(bridgePath, "r");
-	if (f == NULL) {
-		fprintf(stderr, "Cannot open=%s\n", bridgePath);
-		LastPoint = 0;
+	if (bridgePath) {
+		f = fopen(bridgePath, "r");
+		if (f == NULL) {
+			fprintf(stderr, "Cannot open=%s\n", bridgePath);
+			LastPoint = 0;
+			return NULL;
+		}
+		////free(bridgePath);
+	}
+	else {
+		fprintf(stderr, "EoMakePath error %s\n", bridgePath);
 		return NULL;
 	}
 	while(fgets(buf, BUFSIZ, f) != NULL) {

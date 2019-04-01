@@ -9,6 +9,7 @@ typedef unsigned long ulong;
 //
 #include "esp3.h"
 
-VOID PacketDump(byte *p);
-ULONG SystemMSec(void);
+VOID PacketDebug(INT flag);
+VOID PacketDump(BYTE *p);
+ULONG SystemMSec(VOID);
 RETURN_CODE GetPacket(INT Fd, BYTE *Packet, USHORT BufferLength);

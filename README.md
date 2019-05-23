@@ -1,7 +1,7 @@
 # EnOcean Gateways
 ### EnOceanGateways
 
-## [de:code 2019 日本語解説はこちら](README_ja.md)
+## [de:code 2019 サンプルコード 日本語解説はこちら](README_ja.md)
 
 ## Dolphin Ride (dpride) -- The basic EnOcean gateway.
 

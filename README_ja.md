@@ -9,25 +9,25 @@
     - EnOceanデバイス上のボタンを押すだけでIoT Hubにデバイス登録するEnOcean IoTデータ通信ゲートウェイ
     - 各種フォーマットのEnOceanセンサーのデータをAzure IoT Hub に転送します。
     
-    詳細は [Dolphin Ride](/DolphinRide/) 参照。
+ 詳細は [Dolphin Ride](/DolphinRide/) 参照。
 
 ### simulated_device_cloud_upload_sample (IoT Edge V1)
     - Azure IoT Hub / Azure IoT Central 接続をサポートします。
     - [Azure IoT Edge V1](https://github.com/Azure/iot-edge-v1) のsimulated_device_cloud_upload_sampleをEnOcean / Dolphin Ride に対応する様に改造したものです。
     - 以前は２秒おきのポーリングでデータファイルを読み出していましたが、現在は POSIX Signal を使用して、ほぼリアルタイムでデータ転送します。
     
-    詳細は [Dolphin Ride](/DolphinRide/) 参照。  
+詳細は [iot-edge-hacks](/https://github.com/ahidaka/iot-edge-hacks/) 参照。  
 
 ### iothub_registrymanager_sample
     - [IoTHub-Explorer](https://www.npmjs.com/package/iothub-explorer) や Azure IoT Toolkit (Python) に代わるコマンドライン型の高速 IoT Hub デバイス・メンテナンス・ツール。
     - [Azure-IoT-SDK-C](https://github.com/Azure/azure-iot-sdk-c) のサンプルを改造して、REST で直接 IoT Hub にアクセスするため、高速です。使い勝手は、IoTHub-Explorer に合わせています。
     
-    詳細は [改造版 azure-iot-sdk-c の iothub_registrymanager_sample](https://github.com/ahidaka/azure-iot-sdk-c/tree/registrymanager_sample/iothub_service_client/samples/iothub_registrymanager_sample) 参照。  
+詳細は [改造版 azure-iot-sdk-c の iothub_registrymanager_sample](https://github.com/ahidaka/azure-iot-sdk-c/tree/registrymanager_sample/iothub_service_client/samples/iothub_registrymanager_sample) 参照。  
 
 ### Azure IoT Support ツール群
     - IoT Edge では JSON で設定ファイルを基準するため、メンテナンスが面倒です。前述のDolphin Ride (dpriode) / simulated_device_cloud_upload_sample (IoT Edge V1) 使用時にこの JSON ファイルを自動メンテナンスするツールを作りました。これにより、デバイスの追加・変更・削除時に Azure Portal, Device Exploror, 設定用 JSON ファイルのいずれも触らずに Azure IoT Hub の登録デバイスを自動メンテナンス
     
-    詳細は [AzureIoTSupport](/AzureIoTSupport/) 参照。
+詳細は [AzureIoTSupport](/EnOceanGateways/AzureIoTSupport/) 参照。
 
 ## 解説：何をするものか
 

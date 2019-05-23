@@ -22,7 +22,7 @@
     - [IoTHub-Explorer](https://www.npmjs.com/package/iothub-explorer) や Azure IoT Toolkit (Python) に代わるコマンドライン型の高速 IoT Hub デバイス・メンテナンス・ツール。
     - [Azure-IoT-SDK-C](https://github.com/Azure/azure-iot-sdk-c) のサンプルを改造して、REST で直接 IoT Hub にアクセスするため、高速です。使い勝手は、IoTHub-Explorer に合わせています。
     
-詳細は [改造版 azure-iot-sdk-c の iothub_registrymanager_sample](https://github.com/ahidaka/azure-iot-sdk-c/tree/registrymanager_sample/iothub_service_client/samples/iothub_registrymanager_sample) 参照。  
+詳細は [改造版 azure-iot-sdk-c](https://github.com/ahidaka/azure-iot-sdk-c) の [iothub_registrymanager_sample](https://github.com/ahidaka/azure-iot-sdk-c/tree/registrymanager_sample/iothub_service_client/samples/iothub_registrymanager_sample) 参照。  
 
 ### Azure IoT Support ツール群
     - IoT Edge では JSON で設定ファイルを基準するため、メンテナンスが面倒です。前述のDolphin Ride (dpriode) / simulated_device_cloud_upload_sample (IoT Edge V1) 使用時にこの JSON ファイルを自動メンテナンスするツールを作りました。これにより、デバイスの追加・変更・削除時に Azure Portal, Device Exploror, 設定用 JSON ファイルのいずれも触らずに Azure IoT Hub の登録デバイスを自動メンテナンス

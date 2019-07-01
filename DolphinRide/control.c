@@ -12,6 +12,8 @@
 #define SC_SIZE 16
 #define NODE_TABLE_SIZE 256
 
+//#define VLD_DEBUG 1
+
 extern void PrintProfileAll(void);
 
 //
@@ -699,8 +701,8 @@ void WriteVldBridgeFile(uint Id, byte *Data)
 	NODE_TABLE *nt = GetTableId(Id);
 	PROFILE_CACHE *pp;
 	UNIT *pu;
-	ULONG rawData;
-	ULONG partialData;
+	ULONG64 rawData;
+	ULONG64 partialData;
 	double convertedData;
 	enum { bitMask = 0xFFFFFFFFFFFFFFFFULL };
 	UINT maxBitOffset;
@@ -709,9 +711,10 @@ void WriteVldBridgeFile(uint Id, byte *Data)
 	char *fileName;
 #define SIZE_MASK(n) (bitMask >> (64 - (n)))
 
-	//printf("*%s: %08X data=%02X %02X %02X %02X %02X %02X scnt=%d\n", __FUNCTION__,
-	//       Id, Data[0], Data[1], Data[2], Data[3], Data[4], Data[5], nt->SCCount);
-
+#if VLD_DEBUG
+	printf("*%s: %08X data=%02X %02X %02X %02X %02X %02X scnt=%d\n", __FUNCTION__,
+	       Id, Data[0], Data[1], Data[2], Data[3], Data[4], Data[5], nt->SCCount);
+#endif
 	if (nt == NULL) {
 		Error("cannot find id");
 		return;
@@ -745,8 +748,10 @@ void WriteVldBridgeFile(uint Id, byte *Data)
 		rawData |= Data[i];
 		//printf("**** rawData=%lx\n", rawData);
 	}
-	//printf("**** maxBitOffset=%u actualByteSize=%u rawData=%lu(0x%0lx)\n",
-	//       maxBitOffset, actualByteSize, rawData, rawData);
+#if VLD_DEBUG
+	printf("**** maxBitOffset=%u actualByteSize=%u rawData=%llu(0x%0llx)\n",
+	       maxBitOffset, actualByteSize, rawData, rawData);
+#endif
 	pu = &pp->Unit[0];
 	for(i = 0; i < nt->SCCount; i++) {
 		int maxBitPos = actualByteSize * 8 -1;
@@ -759,9 +764,11 @@ void WriteVldBridgeFile(uint Id, byte *Data)
 		//printf("****SIZE_MASK=%lx\n", SIZE_MASK(pu->SizeBit));
 
 		convertedData = partialData * pu->Slope + pu->Offset;
-		//printf("****%s:R=%lu PD=%lu fr=%u nw=%u sz=%u sl=%.2lf of=%.2lf dt=%.2lf\n",
-		//       fileName, rawData, partialData, pu->FromBit, newFromBit, pu->SizeBit,
-		//       pu->Slope, pu->Offset, convertedData);
+#if VLD_DEBUG
+		printf("****%s:R=%llu PD=%llu fr=%u nw=%u sz=%u sl=%.2lf of=%.2lf dt=%.2lf\n",
+		       fileName, rawData, partialData, pu->FromBit, newFromBit, pu->SizeBit,
+		       pu->Slope, pu->Offset, convertedData);
+#endif
 		WriteBridge(fileName, convertedData, pu->Unit);
 
 		//printf("*%d: %s.%s=%lu/%.2lf,f=%u z=%u s=%.2lf o=%.2lf\n", i,

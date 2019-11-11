@@ -3,8 +3,19 @@
 //
 #pragma once
 
-#define ENUM_SIZE 32
-#define EEP_STRSIZE 10
+#define ENUM_SIZE (16)
+#define EEP_STRSIZE (10)
+
+#define CM_STRSIZE (16)
+#define CM_STRBASE (12)
+#define CM_STRSUFFIX (3)
+#define CM_CACHE_SIZE (256)
+
+#ifndef SC_SIZE
+#define SC_SIZE (16)
+#endif
+
+#include "typedefs.h"
 
 typedef struct _enumtable
 {
@@ -12,9 +23,17 @@ typedef struct _enumtable
         char *Desc;
 } ENUMTABLE;
 
+typedef enum _value_type
+{
+        NotUsed = 0,
+        Data = 1,
+        Flag = 2,
+        Enum = 3
+} VALUE_TYPE;
+
 typedef struct _datafield
 {
-        int Reserved; // means not used
+        VALUE_TYPE ValueType; // 0: Not used, 1: Data, 2: Binary Flag, 3: Enumerated data
         char *DataName;
         char *ShortCut;
         int BitOffs;
@@ -35,6 +54,41 @@ typedef struct _eep_table
         DATAFIELD *Dtable;
 } EEP_TABLE;
 
+
+//
+// EEP Profile cache
+//
+typedef struct _unit {
+	VALUE_TYPE ValueType;
+        char *SCut;
+        char *Unit;
+        char *DName;
+        INT FromBit;
+        INT SizeBit;
+        double Slope;
+        double Offset;
+	// char *EnumArray[]; // not implemented now
+} UNIT;
+
+typedef struct _profile_cache {
+	char StrKey[16];
+        UNIT Unit[SC_SIZE];
+
+} PROFILE_CACHE;
+
+//
+//
+//
+typedef struct _cm_table
+{
+        VOID *CmHandle;       // (CM_HANDLE *)
+        char *CmStr;          // ex.[tp8hu12tp8ac12]
+        char *Title;          // ex."Temperature, tp, ac, +3"
+	INT  Count;
+        DATAFIELD *Dtable;
+} CM_TABLE;
+
+
 //
 // export functions
 //
@@ -43,4 +97,3 @@ EEP_TABLE *GetEep(char *EEP);
 void PrintEepAll();
 void PrintEep(char *EEP);
 void SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DATAFIELD *Pd);
-

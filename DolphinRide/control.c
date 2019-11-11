@@ -6,66 +6,37 @@
 #include <ctype.h>
 
 #include "typedefs.h"
+#include "utils.h"
 #include "dpride.h"
 #include "ptable.h"
-
-#define SC_SIZE 16
-#define NODE_TABLE_SIZE 256
+#include "models.h"
 
 //#define VLD_DEBUG 1
+//#define CD_DEBUG 1
 
 extern void PrintProfileAll(void);
+extern NODE_TABLE NodeTable[];
 
 //
-// Control file node table
+// static table
 //
-typedef struct _node_table {
-	UINT Id;
-        char *Eep;
-	char *Desc;
-	INT SCCount;
-	char **SCuts;
-} NODE_TABLE;
-
-NODE_TABLE NodeTable[NODE_TABLE_SIZE];
-
-//
-// Profile cache
-//
-typedef struct _unit {
-        char *SCut;
-	char *Unit;
-	char *DName;
-        INT FromBit;
-        INT SizeBit;
-        double Slope;
-        double Offset;
-} UNIT;
-
-typedef struct _profile_cache {
-        union _eep {
-                char String[8];
-                UINT64 Key;
-        }  Eep;
-	UINT Padding;
-
-	UNIT Unit[SC_SIZE];
-
-} PROFILE_CACHE;
-
 PROFILE_CACHE CacheTable[NODE_TABLE_SIZE];
 
+extern const char *_value_type_string[];
+
+//
+//
+//
 NODE_TABLE *GetTableId(UINT Target);
 
-PROFILE_CACHE *GetCache(char *Eep);
-
+PROFILE_CACHE *GetEepCache(char *Eep);
 
 char *MakeNewName(char *Original, INT Suffix)
 {
 	int len = strlen(Original);
 	char *buf;
 
-	buf = malloc(len + 3);
+	buf = malloc(len + 4); // strlen(".999") == 4
 	if (buf == NULL) {
 		Error("cannot alloc buffer");
 		return NULL;
@@ -74,51 +45,13 @@ char *MakeNewName(char *Original, INT Suffix)
 	return buf;
 }
 
-NODE_TABLE *GetTableId(uint Target)
+char *GetTableEep(uint TargetId)
 {
-	bool found = false;
-	int i;
-	NODE_TABLE *nt = &NodeTable[0];
-
-	for(i = 0; i < NODE_TABLE_SIZE; i++) {
-		//printf("*%s:T=%08X N=%08X\n",
-		//       __FUNCTION__, Target, nt->Id);
-		if (nt->Id == 0) {
-			break;
-		}
-		else if (Target == nt->Id) {
-			//printf("*%s:Found T=%08X\n", __FUNCTION__, Target);
-			found = true;
-			break;
-		}
-		nt++;
-	}
-	return found ? nt : NULL;
-}
-
-bool CheckTableId(uint Target)
-{
-	//printf("*%s:Target=%08X\n", __FUNCTION__, Target);
-	return(GetTableId(Target) != NULL);
-}
-
-int GetTableIndex(uint Target)
-{
-        NODE_TABLE *nt = &NodeTable[0];
-        NODE_TABLE *targetNT;
-
-	//printf("*%s:Target=%08X\n", __FUNCTION__, Target);
-	targetNT = GetTableId(Target);
-	return (targetNT == NULL ? -1 : targetNT - nt);
-}
-
-char *GetTableEep(uint Target)
-{
-	NODE_TABLE *nt = GetTableId(Target);
+	NODE_TABLE *nt = GetTableId(TargetId);
 	return (nt == NULL ? NULL : nt->Eep);
 }
 
-bool CheckTableEep(char *Target)
+bool CheckTableSCut(char *SCut)
 {
 	bool collision = false;
 	int i, j;
@@ -131,8 +64,8 @@ bool CheckTableEep(char *Target)
 		}
 		ps = nt->SCuts;
 		for(j = 0; j < nt->SCCount && *ps != NULL; j++) {
-			//printf("++%s: \'%s\'\n", Target, *ps);
-			if (!strcmp(Target, *ps++)) {
+			//printf("++%s: \'%s\'\n", SCut, *ps);
+			if (!strcmp(SCut, *ps++)) {
 				//matched
 				collision = true;
 				break;
@@ -147,175 +80,93 @@ bool CheckTableEep(char *Target)
 	return collision;
 }
 
-char *GetNewName(char *Target)
+bool CheckTableSCutWithCurrent(char *SCut, char **list)
 {
-	int suffix;
-	char *newName;
-	char *origName;
-	extern void EoReloadControlFile();
+	bool collision = false;
+	int i, j;
+	NODE_TABLE *nt = &NodeTable[0];
+	char **ps;
 
-	EoReloadControlFile();
-	if (CheckTableEep(Target)) {
-		// Find collision
-		origName = Target;
-		Target = NULL; // Clear for new Name
-		for(suffix = 1; suffix <= MAX_SUFFIX; suffix++) {
-			newName = MakeNewName(origName, suffix);
-			if (!CheckTableEep(newName)) {
-				Target = newName;
-				//printf("NEW:%s not mached\n", Target);
+	while(*list != NULL) {
+		if (!strcmp(SCut, *list)) {
+			collision = true;
+			return collision;
+		}
+		list++;
+	}
+
+	for(i = 0; i < NODE_TABLE_SIZE; i++) {
+		if (nt->Id == 0) {
+			break;
+		}
+		ps = nt->SCuts;
+		for(j = 0; j < nt->SCCount && *ps != NULL; j++) {
+			//printf("++%s: \'%s\'\n", SCut, *ps);
+			if (!strcmp(SCut, *ps++)) {
+				//matched
+				collision = true;
 				break;
 			}
 		}
-	}
-	else 
-		; //printf("ORG:%s not mached\n", Target);
-
-	return Target;
-}
-
-
-//inline bool IsTerminator(char c)
-bool IsTerminator(char c)
-{
-	return (c == '\n' || c == '\r' || c == '\0' || c == '#');
-}
-
-char *DeBlank(char *p)
-{
-	while(isblank(*p)) {
-		p++;
-	}
-	return p;
-}
-
-char *CheckNext(char *p)
-{
-	if (IsTerminator(*p)) {
-		// Oops, terminated suddenly
-		return NULL;
-	}
-	p = DeBlank(p);
-	if (IsTerminator(*p)) {
-		// Oops, terminated suddenly again
-		return NULL;
-	}
-	return p;
-}
-
-char *GetItem(char *p, char **item)
-{
-	char buf[BUFSIZ];
-	char *base;
-	char *duped;
-	char *pnext;
-	int i;
-
-	//printf("*** GetIem: p=%s\n", p); //DEBUG
-	base = &buf[0];
-	for(i = 0; i < BUFSIZ; i++) {
-		if (*p == ',' || IsTerminator(*p))
+		if (collision) {
+			//printf("collision: \n");
 			break;
-		*base++ = *p++;
+		}
+		nt++;
 	}
-	pnext = p + (*p == ','); // if ',', forward one char
-	*base = '\0';
-	duped = strdup(buf);
-	if (duped == NULL) {
-		Error("duped == NULL");
+	return collision;
+}
+
+char *GetNewName(char *Original)
+{
+	int suffix;
+	char *newName;
+
+	if (CheckTableSCut(Original)) {
+		// Found collision
+		for(suffix = 1; suffix <= MAX_SUFFIX; suffix++) {
+			newName = MakeNewName(Original, suffix);
+			if (!CheckTableSCut(newName)) {
+				return newName;
+			}
+		}
 	}
 	else {
-		*item = duped;
+		; //printf("ORG:%s not mached\n", Target);
 	}
-	return pnext;
+	return strdup(Original);
 }
 
-int DecodeLine(char *Line, uint *Id, char **Eep, char **Desc, char ***SCuts)
+char *GetNewNameWithCurrent(char *Original, char **List)
 {
-	char *p;
-	char *item;
-	int scCount = 0;
-	char **scTable;
-	int i;
+	int suffix;
+	char *newName;
 
-	scTable = (char **) malloc(sizeof(char *) * SC_SIZE);
-	if (scTable == NULL) {
-		Error("cannot alloc scTable");
-		return 0;
-	}
-
-	p = GetItem(DeBlank(Line), &item);
-	if (p == NULL || IsTerminator(*p) || *p == ',') {
-		if (item)
-			free(item);
-		return 0;
-	}
-	//printf("**0: <%s><%s>\n", item, p);  //DEBUG
-	*Id = strtoul(item, NULL, 16);
-
-	if ((p = CheckNext(p)) == NULL) {
-		Error("cannot read EEP item");
-		return 0;
-	}
-	p = GetItem(p, &item);
-	if (p == NULL || IsTerminator(*p) || *p == ',') {
-		if (item)
-			free(item);
-		return 0;
-	}
-	*Eep = item;
-
-	if ((p = CheckNext(p)) == NULL) {
-		Error("cannot read Desc item");
-                if (item)
-                        free(item);
-		return 0;
-	}
-	p = GetItem(p, &item);
-	if (p == NULL || IsTerminator(*p) || *p == ',') {
-		if (item)
-			free(item);
-		return 0;
-	}
-	*Desc = item;
-
-	if ((p = CheckNext(p)) == NULL) {
-		Error("cannot read SCut first item");
-		if (item)
-                        free(item);
-		return 0;
-	}
-
-	for(i = 0; i < SC_SIZE; i++) {
-		p = GetItem(p, &item);
-		if (p == NULL) {
-			if (item)
-				free(item);
-			break;
-		}
-		scTable[i] = item;
-
-		if ((p = CheckNext(p)) == NULL) {
-			//End of line
-			break;
+	if (CheckTableSCutWithCurrent(Original, List)) {
+		// Found collision
+		for(suffix = 1; suffix <= MAX_SUFFIX; suffix++) {
+			newName = MakeNewName(Original, suffix);
+			if (!CheckTableSCutWithCurrent(newName, List)) {
+				return newName;
+			}
 		}
 	}
-	*SCuts = (char **) scTable;
-	scCount = i + 1;
-	return scCount;
+	else {
+		; //printf("ORG:%s not mached\n", Target);
+	}
+	return strdup(Original);
 }
 
-PROFILE_CACHE *GetCache(char *Eep)
+PROFILE_CACHE *GetEepCache(char *Eep)
 {
 	int i;
 	PROFILE_CACHE *pp = &CacheTable[0];
-        UINT64 *eepKey = (UINT64 *) Eep;
 
         for(i = 0; i < NODE_TABLE_SIZE; i++) {
-                if (*eepKey == pp->Eep.Key) {
+                if (!strcmp(Eep, pp->StrKey)) {
                         break;
                 }
-                else if (pp->Eep.Key == 0ULL) {
+                else if (pp->StrKey[0] == '\0') {
 			// reach to end, not found
                         return NULL;
                 }
@@ -328,34 +179,20 @@ PROFILE_CACHE *GetCache(char *Eep)
 	return pp;
 }
 
-//inline double CalcA(double x1, double y1, double x2, double y2)
-double CalcA(double x1, double y1, double x2, double y2)  
-{
-	return (double) (y1 - y2) / (double) (x1 - x2);
-}
-
-//inline double CalcB(double x1, double y1, double x2, double y2)
-double CalcB(double x1, double y1, double x2, double y2)
-{
-	return (((double) x1 * y2 - (double) x2 * y1) / (double) (x1 - x2)); 
-}
-
-int AddCache(char *Eep)
+int AddEepCache(char *Eep)
 {
 	EEP_TABLE *pe = GetEep(Eep);
+	CM_TABLE *pmc;
 	DATAFIELD *pd;
 	PROFILE_CACHE *pp = &CacheTable[0];
 	UNIT *pu;
 	int i;
 	int points = 0;
-
-	if (pe == NULL) {
-		// not found
-		return 0;
-	}
+	int count;
+	BOOL isModel = FALSE;
 
         for(i = 0; i < NODE_TABLE_SIZE; i++) {
-		if (pp->Eep.Key == 0ULL) {
+		if (pp->StrKey[0] == '\0') {
 			// empty slot
 			break;
 		}
@@ -365,14 +202,34 @@ int AddCache(char *Eep)
 		// not found
 		return 0;
 	}
-	pp->Eep.Key = *((UINT64 *) pe->Eep);
-	pp->Padding = 0;
+	strcpy(pp->StrKey, Eep);
 	pu = &pp->Unit[0];
-	pd = &pe->Dtable[0];
+	if (pe != NULL && Eep[2] == '-' ) {
+		pd = &pe->Dtable[0];
+		count = pe->Size;
+	}
+	else if ((pmc = CmGetCache(Eep)) != NULL) {
+		isModel = TRUE;
+		pd = &pmc->Dtable[0];
+		count = pmc->Count;
+#if 0
+		////////
+		for(i = 0; i < count; i++) {
+			printf("******* %d:%s=%s\n", i,
+			       pd->ShortCut, pd->DataName);
+			pd++;
+		}
+		////////
+#endif
+	}
+	else {
+		Error("Cannot find EEP and CM");
+		return 0;
+	}
 
 	//printf("*%s: sz:%d pu=%p\n", __FUNCTION__, pe->Size, pu);
-	pd = &pe->Dtable[0];
-	for(i = 0; i < pe->Size; i++) {
+	pd = isModel ? &pmc->Dtable[0] : &pe->Dtable[0];
+	for(i = 0; i < count; i++) {
 		if (pd->ShortCut == NULL) {
 			pd++;
 			continue;
@@ -382,78 +239,154 @@ int AddCache(char *Eep)
 			pd++;
 			continue; //Skip Learn bit
 		}
-		//printf("*%s: %d=%s,%s pu:%p\n", __FUNCTION__, i, pd->ShortCut, pd->DataName, pu);
 
+		////////
+		//printf("*%s: %d=%s,%s pu:%p\n", __FUNCTION__, i, pd->ShortCut, pd->DataName, pu);
+		////////
+		
+		pu->ValueType = pd->ValueType;
 		pu->SCut = pd->ShortCut;
 		pu->DName = pd->DataName;
 		pu->FromBit = pd->BitOffs;
 		pu->SizeBit = pd->BitSize;
 		pu->Unit = pd->Unit;
-		pu->Slope = CalcA(pd->RangeMin, pd->ScaleMin, pd->RangeMax, pd->ScaleMax);
-		pu->Offset = CalcB(pd->RangeMin, pd->ScaleMin, pd->RangeMax, pd->ScaleMax);
+		if (pd->ValueType == Data) {
+			if (isModel) {
+				pu->Slope = (pd->ScaleMax - pd->ScaleMin) / pd->RangeMax;
+				pu->Offset = pd->ScaleMin; 
+			}
+			else {
+				pu->Slope = CalcA(pd->RangeMin, pd->ScaleMin, pd->RangeMax, pd->ScaleMax);
+				pu->Offset = CalcB(pd->RangeMin, pd->ScaleMin, pd->RangeMax, pd->ScaleMax);
+			}
+#if 0
+			printf("*%s:%d:%s: sl=%f of=%f %f %f %d\n", __FUNCTION__, i, isModel ? "Model" : "EEP",
+			       pu->Slope, pu->Offset, pd->ScaleMax, pd->ScaleMin, pd->RangeMax);
+#endif
+		}
 		pu++, pd++, points++;
 	}
 
-	PrintProfileAll();
+	//PrintProfileAll();
 
 	return points;
 }
 
-int ReadCsv(char *Filename)
+//
+// Read profile tablem, then check and cache EEP and Model cache
+//
+int CacheProfiles(void)
 {
-	char buf[BUFSIZ];
-	FILE *fd;
 	NODE_TABLE *nt;
-	uint id;
+	//uint id;
 	char *eep;
-	char *desc;
-	char **scs;
 	int scCount;
+	CM_TABLE *model;
 	int lineCount = 0;
 
+	//printf("******* ReadCsv\n");
+	
 	nt = &NodeTable[0];
+	while(true) {
+		if (nt->Id == 0) { // found EOL 
+			break;
+		}
+		eep = nt->Eep;
+		if (eep && eep[2]  != '-') {
+			// Common Model	
+			model = CmGetCache(eep);
+			if (model == NULL) {
+				Error("Model entry not found");
+				break;
+			}
+		}
+		//else {
+		//	nt->Model = NULL;
+		//}
+
+		if (!GetEepCache(eep)) {
+			scCount = AddEepCache(eep);
+			if (scCount == 0) {
+				;; //Error("AddEepCache() error");
+			}
+			//printf("*%s: AddEepCache(%s)=%d\n", __FUNCTION__,
+			//       eep, scCount);
+		}
+		nt++;
+		lineCount++;
+	}
+
+	return lineCount;
+}
+
+int ReadModel(char *Filename)
+{
+        const int bufferSize = BUFSIZ / 4;
+	char buf[bufferSize];
+	BYTE binArray[bufferSize];
+	FILE *fd;
+	char *s;
+	CM_TABLE *pmc;
+	int length;
+	int count = 0;
+
+	//printf("******* ReadModel\n");
+	
 	fd = fopen(Filename, "r");
 	if (fd == NULL) {
 		Error("Open error");
 		return 0;
 	}
-	while(true) {
-		char *rtn = fgets(buf, BUFSIZ, fd);
-		if (rtn == NULL) {
-			//printf("*fgets: EOF found\n");
-			break;
-		}
-		scCount = DecodeLine(buf, &id, &eep, &desc, &scs);
-		if (scCount > 0) {
-			if (nt->SCuts) {
-				//purge old shortcuts
-				; ////free(nt->SCuts);
-			}
-			nt->Id = id;
-			nt->Eep = eep;
-			nt->Desc = desc;
-			nt->SCuts = scs;
-			nt->SCCount = scCount;
-			nt++;
-			lineCount++;
-			if (lineCount >= NODE_TABLE_SIZE) {
-				Error("Node Table overflow");
-				break;
-			}
-		}
-		if (!GetCache(eep)) {
-			scCount = AddCache(eep);
-			if (scCount == 0) {
-				;; //Error("AddCache() error");
-			}
-			//printf("*%s: AddCache(%s)=%d\n", __FUNCTION__,
-			//       eep, scCount);
-		}
-	}
-	nt->Id = 0; //mark EOL
-	fclose(fd);
 
-	return lineCount;
+	CmCleanUp();
+
+        do {
+                memset(buf, 0, bufferSize);
+                memset(binArray, 0, bufferSize);
+		s = fgets(buf, bufferSize, fd);
+                if (s == NULL || *s == '\0')
+                        break;
+
+                if (buf[strlen(buf) - 1] == '\n') {
+                        buf[strlen(buf) - 1] = '\0';
+                }
+
+                length = CmTextToBin(buf, binArray);
+                pmc = CmGetModel((BYTE *)binArray, length);
+                if (pmc != NULL && pmc->Count > 0) {
+#ifdef MODEL_DEBUG
+			int i;
+                        printf("####[%s] '%s' count=%d len=%d\n\n\n",
+                               pmc->CmStr, pmc->Title, pmc->Count, length);
+			for(i = 0; i < pmc->Count; i++) {
+				DATAFIELD *pd = &pmc->Dtable[i];
+				if (pd->ShortCut == NULL)
+					break;
+				printf("#### %d:%s-%s[%s] %d,%d %d,%d %f,%f(%s)\n",
+				       i, _value_type_string[pd->ValueType],
+				       pd->DataName,
+				       pd->ShortCut,
+				       pd->BitOffs,
+				       pd->BitSize,
+				       pd->RangeMin,
+				       pd->RangeMax,
+				       pd->ScaleMin,
+				       pd->ScaleMax,
+				       pd->Unit);
+			}
+#endif
+			count++;
+                }
+                else {
+                        fprintf(stderr, "CmGetModel error count=%d!\n", count);
+			break;
+                }
+        }
+        while(s != NULL);
+
+        fclose(fd);
+
+	return count;
 }
 
 int ReadCmd(char *Filename, int *Mode, char *Param)
@@ -461,9 +394,9 @@ int ReadCmd(char *Filename, int *Mode, char *Param)
 	FILE *fd;
 	int mode = 0;
 	char param  = 0;
-	char buffer[BUFSIZ];
+	char buffer[BUFSIZ / 8];
 	static int lastMode = 0;
-	static char lastBuffer[BUFSIZ] = {'\0'};
+	static char lastBuffer[BUFSIZ / 8] = {'\0'};
 
 	fd = fopen(Filename, "r");
 	if (fd == NULL) {
@@ -541,29 +474,29 @@ void WriteRpsBridgeFile(uint Id, byte *Data)
 		Error("cannot find id");
 		return;
 	}
-	pp = GetCache(nt->Eep);
+	pp = GetEepCache(nt->Eep);
 	if (pp == NULL) {
 		Error("cannot find EEP");
 		return;
 	}
 	
-	LogMessageStart(Id, pp->Eep.String);
+	LogMessageStart(Id, pp->StrKey);
 	
         //F6-02-04
-	if (!strcmp(pp->Eep.String, "F6-02-04")) {
+	if (!strcmp(pp->StrKey, "F6-02-04")) {
 		pu = &pp->Unit[0];
 		rawData = Data[0];
 		for(i = 0; i < nt->SCCount; i++) {
 			fileName = nt->SCuts[i];
 			switchData = (rawData >> pu->FromBit) & (0x01);
 			WriteBridge(fileName, switchData, "\0");
-			printf("*%d: %s.%s=%d (%02X)\n", i,
-			       fileName, pu->SCut, switchData, rawData);
+			//printf("*%d: %s.%s=%d (%02X)\n", i,
+			//       fileName, pu->SCut, switchData, rawData);
 			pu++;
 		}
 	}
 	//F6-02-01
-	else /*if (!strcmp(pp->Eep.String, "F6-02-01")) */ {
+	else /*if (!strcmp(pp->StrKey, "F6-02-01")) */ {
 		BYTE nu = Data[1] & 0x10;
 		BYTE first, second;
 		BYTE eb, sa;
@@ -602,8 +535,8 @@ void WriteRpsBridgeFile(uint Id, byte *Data)
 				break;
 			}
 			WriteBridge(fileName, switchData, "\0");
-			printf("*%d: %s.%s=%d (%02X %02X)\n", i,
-			       fileName, pu->SCut, switchData, Data[0], Data[1]);
+			//printf("*%d: %s.%s=%d (%02X %02X)\n", i,
+			//       fileName, pu->SCut, switchData, Data[0], Data[1]);
 			pu++;
 		}
 		
@@ -625,13 +558,13 @@ void Write1bsBridgeFile(uint Id, byte *Data)
 		return;
 	}
 
-	pp = GetCache(nt->Eep);
+	pp = GetEepCache(nt->Eep);
 	if (pp == NULL) {
 		Error("cannot find EEP");
 		return;
 	}
 	
-	LogMessageStart(Id, pp->Eep.String);
+	LogMessageStart(Id, pp->StrKey);
 
         //D5-00-01
 	pu = &pp->Unit[0];
@@ -666,13 +599,13 @@ void Write4bsBridgeFile(uint Id, byte *Data)
 		Error("cannot find id");
 		return;
 	}
-	pp = GetCache(nt->Eep);
+	pp = GetEepCache(nt->Eep);
 	if (pp == NULL) {
 		Error("cannot find EEP");
 		return;
 	}
 
-	LogMessageStart(Id, pp->Eep.String);
+	LogMessageStart(Id, pp->StrKey);
 
 	pu = &pp->Unit[0];
 	for(i = 0; i < nt->SCCount; i++) {
@@ -719,13 +652,13 @@ void WriteVldBridgeFile(uint Id, byte *Data)
 		Error("cannot find id");
 		return;
 	}
-	pp = GetCache(nt->Eep);
+	pp = GetEepCache(nt->Eep);
 	if (pp == NULL) {
 		Error("cannot find EEP");
 		return;
 	}
 
-	LogMessageStart(Id, pp->Eep.String);
+	LogMessageStart(Id, pp->StrKey);
 
 	// Examine the total byte counts in VLD data packet
 	maxBitOffset = 0;
@@ -780,18 +713,134 @@ void WriteVldBridgeFile(uint Id, byte *Data)
 #undef SIZE_MASK
 }
 
+void WriteCdBridgeFile(uint Id, byte *Data)
+{
+	int i;
+	NODE_TABLE *nt = GetTableId(Id);
+	PROFILE_CACHE *pp;
+	UNIT *pu;
+	ULONG partialData;
+	double convertedData;
+	char *fileName;
+
+#if CD_DEBUG
+	CM_TABLE *pmc = CmGetCache(nt->Eep);
+	DATAFIELD *pd = pmc->Dtable;
+	
+	printf("**CD*%s: %08X data=%02X %02X %02X %02X %02X %02X scnt=%d\n", __FUNCTION__,
+	       Id, Data[0], Data[1], Data[2], Data[3], Data[4], Data[5], nt->SCCount);
+
+	for(i = 0; i < pmc->Count; i++) {
+		printf("*%s: %d %d =%d %f %f\n",
+		       pd->ShortCut, pd->BitOffs, pd->BitSize,
+		       pd->RangeMax, pd->ScaleMin, pd->ScaleMax);
+		pd++;
+	}
+#endif
+	if (nt == NULL) {
+		Error("cannot find id");
+		return;
+	}
+	pp = GetEepCache(nt->Eep);
+	if (pp == NULL) {
+		Error("cannot find EEP");
+		return;
+	}
+
+	LogMessageStart(Id, pp->StrKey);
+
+	pu = &pp->Unit[0];
+	for(i = 0; i < nt->SCCount; i++) {
+		fileName = nt->SCuts[i];
+		partialData = GetBits(Data, pu->FromBit, pu->SizeBit);
+		convertedData = partialData * pu->Slope + pu->Offset;
+#if CD_DEBUG
+		printf("**CD*%s:PD=%lu fr=%u sz=%u sl=%.2lf of=%.2lf dt=%.2lf\n",
+		       fileName, partialData, pu->FromBit, pu->SizeBit,
+		       pu->Slope, pu->Offset, convertedData);
+#endif
+		WriteBridge(fileName, convertedData, pu->Unit);
+
+		pu++;
+	}
+}
+
+void WriteSdBridgeFile(uint Id, byte *Data)
+{
+	int i;
+	NODE_TABLE *nt = GetTableId(Id);
+	PROFILE_CACHE *pp;
+	UNIT *pu;
+	ULONG partialData;
+	double convertedData;
+	char *fileName;
+	int index;
+	int count;
+	int fromBit;
+	const int headerSize = 4;
+	const int indexSize = 6;
+
+#if CD_DEBUG
+	CM_TABLE *pmc = CmGetCache(nt->Eep);
+	DATAFIELD *pd = pmc->Dtable;
+	
+	printf("**SD*%s: %08X data=%02X %02X %02X %02X %02X %02X scnt=%d\n", __FUNCTION__,
+	       Id, Data[0], Data[1], Data[2], Data[3], Data[4], Data[5], nt->SCCount);
+
+	for(i = 0; i < pmc->Count; i++) {
+		printf("*%s: %d %d =%f %f\n",
+		       pd->ShortCut, pd->BitOffs, pd->BitSize,
+		       pd->RangeMin * pd->ScaleMin,
+		       pd->RangeMin * pd->ScaleMax);
+		pd++;
+	}
+#endif
+	if (nt == NULL) {
+		Error("cannot find id");
+		return;
+	}
+	pp = GetEepCache(nt->Eep);
+	if (pp == NULL) {
+		Error("cannot find EEP");
+		return;
+	}
+
+	LogMessageStart(Id, pp->StrKey);
+
+	count = GetBits(Data, 0, headerSize); // SD Header
+	fromBit = headerSize;
+
+	for(i = 0; i < count; i++) {
+		index = GetBits(Data, fromBit, indexSize);
+		fromBit += indexSize;
+
+		fileName = nt->SCuts[index];
+		pu = &pp->Unit[index];
+		partialData = GetBits(Data, fromBit, pu->SizeBit);
+		convertedData = partialData * pu->Slope + pu->Offset;
+#if CD_DEBUG
+		printf("**SD*%s:count=%d index=%d\n", fileName, count, index);
+		printf("**SD*%s:PD=%lu fr=%u sz=%u sl=%.2lf of=%.2lf dt=%.2lf\n",
+		       fileName, partialData, fromBit, pu->SizeBit,
+		       pu->Slope, pu->Offset, convertedData);
+#endif
+		WriteBridge(fileName, convertedData, pu->Unit);
+		fromBit += pu->SizeBit;
+	}
+}
+
 int PrintPoint(char *Eep, int Count)
 {
-        PROFILE_CACHE *pp = GetCache(Eep);
+        PROFILE_CACHE *pp = GetEepCache(Eep);
         UNIT *pu;
         int i;
 
-	printf("*PP:pp=%p(%s) eep=%s cnt=%d\n", pp, pp->Eep.String, Eep, Count); 
+	printf("*PP:pp=%p(%s) eep=%s cnt=%d\n", pp, pp->StrKey, Eep, Count); 
 
         pu = &pp->Unit[0];
         for(i = 0; i < Count; i++) {
-                printf("#%d(%p) p:%s n:%s u:%s f:%d s:%d S:%.2lf O:%.2lf\n",
-		       i, pu,
+                printf("#%d(%s) p:%s n:%s u:%s f:%d s:%d S:%.2lf O:%.2lf\n",
+		       i, _value_type_string[pu->ValueType],
                        pu->SCut,
                        pu->DName,
                        pu->Unit,
@@ -857,27 +906,30 @@ void PrintProfileAll()
 	UNIT *pu;
 
 	for(i = 0; i < NODE_TABLE_SIZE; i++) {
-		printf("*%s: %d: %s %p\n", __FUNCTION__, i, pp->Eep.String, &pp->Unit[0]);
-		
+		printf("*%s: %d: %s\n", __FUNCTION__, i, pp->StrKey);
+
+		if (pp->StrKey == NULL || pp->StrKey[0] == '\0') {
+			printf("No cached data now!\n");
+			break;
+		}
 		pu = &pp->Unit[0];
 		for(j = 0; j < SC_SIZE; j++) {
 			if (pu->SCut == NULL || *pu->SCut == '\0')
 				break;
-			printf(" %d: SCut=%s Unit=%s\n",
-			       j, pu->SCut, pu->Unit);
+			printf(" %d: Type=%s SCut=%s Unit=%s\n",
+			       j, _value_type_string[pu->ValueType],
+			       pu->SCut, pu->Unit);
 			pu++;
 		}
 		pp++;
-		if (pp->Eep.Key == 0ULL)
+		if (pp->StrKey[0] =='\0')
 			break;
 	}
 }
 
-#include <linux/limits.h> //PATH_MAX
 
-//#define EO_DIRECTORY "/var/tmp/dpride"
-//#define EO_CONTROL_FILE "eofilter.txt"
-//#define EO_FILTER_SIZE (128)
+#if 0 ////////////////////////////////////////////
+#include <linux/limits.h> //PATH_MAX
 
 typedef struct _eodata {
 	int  Index;
@@ -988,3 +1040,4 @@ EO_DATA *EoGetDataByIndex(int Index)
 
 	return pe;
 }
+#endif

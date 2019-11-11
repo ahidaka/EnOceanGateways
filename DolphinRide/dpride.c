@@ -19,7 +19,9 @@
 #include "queue.h"
 #include "serial.h"
 #include "esp3.h"
+#include "models.h"
 #include "logger.h"
+#include "utils.h"
 
 static const char copyright[] = "\n(c) 2017 Device Drivers, Ltd. \n";
 static const char version[] = "\n@ dpride Version 1.10 \n";
@@ -27,19 +29,13 @@ static const char version[] = "\n@ dpride Version 1.10 \n";
 //
 #define msleep(a) usleep((a) * 1000)
 
+#define MAINBUFSIZ (1024)
 #define DATABUFSIZ (256)
 #define HEADER_SIZE (5)
 #define CRC8D_SIZE (1)
 
 #define RESPONSE_TIMEOUT (90)
-//
-//
-//
-#define msleep(a) usleep((a) * 1000)
 
-#define DATABUFSIZ (256)
-#define HEADER_SIZE (5)
-#define CRC8D_SIZE (1)
 //
 //
 //
@@ -106,7 +102,7 @@ JOB_COMMAND;
 typedef struct _CMD_PARAM
 {
         int Num;
-        char Data[BUFSIZ];
+        char Data[DATABUFSIZ];
 }
 CMD_PARAM;
 
@@ -125,13 +121,22 @@ THREAD_BRIDGE *GetThdata(void) { return &_Tb; }
 //
 static EO_CONTROL EoControl;
 static long EoFilterList[EO_FILTER_SIZE];
-static char EoLogMonitorMessage[BUFSIZ];
+static char EoLogMonitorMessage[DATABUFSIZ];
 
-//
-//
-//
-//
-//
+typedef struct _CDM_BUFFER
+{
+	INT LastIndex;
+	BYTE Id[4];
+	BYTE Status;
+	INT Length;
+	INT CurrentLength; 
+	INT OptionLength;
+	BYTE Buffer[512];
+}
+CDM_BUFFER;
+
+static CDM_BUFFER CdmBuffer[4];
+
 JOB_COMMAND GetCommand(CMD_PARAM *Param);
 
 //
@@ -155,7 +160,7 @@ JOB_COMMAND GetCommand(CMD_PARAM *Param)
 {
 	EO_CONTROL *p = &EoControl;
 	int mode = 0;
-	char param[BUFSIZ];
+	char param[DATABUFSIZ];
 	const char *OptionName[] = {
 		"Auto",
 		"Break",
@@ -205,6 +210,7 @@ JOB_COMMAND GetCommand(CMD_PARAM *Param)
         return (JOB_COMMAND) mode;
 }
 
+void PushPacket(BYTE *Buffer);
 void LogMessageRegister(char *buf);
 void StartUp(void);
 void SendCommand(BYTE *cmdBuffer);
@@ -223,6 +229,7 @@ int Enqueue(QUEUE_HEAD *Queue, BYTE *Buffer)
                 printf("**ERROR at Enqueue\n");
                 return 0;
         }
+	
         pthread_mutex_lock(&Queue->lock);
         newEntry->Number = INCREMENT(Queue->num_control);
         memcpy(newEntry->Data, Buffer, DATABUFSIZ);
@@ -286,16 +293,21 @@ void QueueData(QUEUE_HEAD *Queue, BYTE *DataBuffer, int Length)
 
 void *ReadThread(void *arg)
 {
-        EO_CONTROL *p = &EoControl;
         int fd = GetFd();
         ESP_STATUS rType;
-        BYTE dataBuffer[DATABUFSIZ];
+        //BYTE dataBuffer[DATABUFSIZ];
+	BYTE   *dataBuffer;
         USHORT  dataLength = 0;
         BYTE   optionLength = 0;
         BYTE   packetType = 0;
-        BYTE   dataType;
+        //BYTE   dataType;
         int    totalLength;
 
+	dataBuffer = malloc(DATABUFSIZ);
+	if (dataBuffer == NULL) {
+		fprintf(stderr, "malloc error at ReadThread\n");
+		return OK;
+	}
         //printf("**ReadThread()\n");
         while(!stop_read) {
                 read_ready = TRUE;
@@ -309,16 +321,15 @@ void *ReadThread(void *arg)
                         dataLength = (dataBuffer[0] << 8) + dataBuffer[1];
                         optionLength = dataBuffer[2];
                         packetType = dataBuffer[3];
-                        dataType = dataBuffer[5];
+                        //dataType = dataBuffer[5];
                         totalLength = HEADER_SIZE + dataLength + optionLength + CRC8D_SIZE;
-
-			if (p->Debug > 0)
+#if 0
+			if (p->Debug > 0) {
+				PacketDump(dataBuffer);
 				printf("D:dLen=%d oLen=%d tot=%d typ=%02X dat=%02X\n",
-				       dataLength,
-				       optionLength,
-				       totalLength,
-				       packetType,
-				       dataType);
+				       dataLength, optionLength, totalLength, packetType, dataType);
+			}
+#endif
                 }
                 else {
                         printf("invalid rType==%02X\n\n", rType);
@@ -351,7 +362,8 @@ void *ReadThread(void *arg)
                         break;
                 }
         }
-
+	free(dataBuffer);
+	
         //printf("ReadThread end=%d stop_read=%d\n", stop_job, stop_read);
         return (void*) NULL;
 }
@@ -362,7 +374,14 @@ void *ActionThread(void *arg)
         byte *data;
         size_t offset;
         QUEUE_ENTRY *qentry;
-        BYTE buffer[DATABUFSIZ];
+        //BYTE buffer[DATABUFSIZ];
+        BYTE *buffer;
+
+	buffer = malloc(DATABUFSIZ);
+	if (buffer == NULL) {
+		fprintf(stderr, "malloc error at ReadThread\n");
+		return OK;
+	}
 
         while(!stop_action && !stop_job) {
                 data = Dequeue(&DataQueue);
@@ -370,16 +389,16 @@ void *ActionThread(void *arg)
                         msleep(1);
                 else {
                         memcpy(buffer, data, DATABUFSIZ);
+
                         offset = offsetof(QUEUE_ENTRY, Data);
                         qentry = (QUEUE_ENTRY *)(data - offset);
                         free(qentry);
 
-			PacketDump(buffer);
 			MainJob(buffer);
                 }
         }
+	free(buffer);
         return OK;
-
 }
 
 BOOL InitSerial(OUT int *pFd)
@@ -482,8 +501,8 @@ ESP_STATUS GetResponse(OUT BYTE *Buffer)
                 break;
         }
 
-        PacketDump(Buffer);
-        printf("**GetResponse=%d\n", responseMessage);
+        //PacketDump(Buffer);
+        //printf("**GetResponse=%d\n", responseMessage);
         return responseMessage;
 }
 
@@ -554,7 +573,12 @@ int EoReadControl()
 	if (p->ControlPath == NULL) {
 		p->ControlPath = MakePath(p->BridgeDirectory, p->ControlFile); 
 	}
-	return( ReadCsv(p->ControlPath) );
+	if (p->ModelPath == NULL) {
+		p->ModelPath = MakePath(p->BridgeDirectory, p->ModelFile); 
+	}
+	(VOID) ReadModel(p->ModelPath);
+	(VOID) ReadCsv(p->ControlPath);
+	return CacheProfiles();
 }
 
 void EoClearControl()
@@ -564,9 +588,16 @@ void EoClearControl()
  	if (p->ControlPath == NULL) {
 		p->ControlPath = MakePath(p->BridgeDirectory, p->ControlFile); 
 	}
+	if (p->ModelPath == NULL) {
+		p->ModelPath = MakePath(p->BridgeDirectory, p->ModelFile); 
+	}
         if (truncate(p->ControlPath, 0)) {
 		fprintf(stderr, "%s: truncate error=%s\n", __FUNCTION__,
 			p->ControlPath);
+        }
+        if (truncate(p->ModelPath, 0)) {
+		fprintf(stderr, "%s: truncate error=%s\n", __FUNCTION__,
+			p->ModelPath);
         }
 	p->ControlCount = 0;
 }
@@ -588,8 +619,8 @@ bool EoApplyFilter()
 			pid[1] = ((BYTE *)&id)[2];
 			pid[2] = ((BYTE *)&id)[1];
 			pid[3] = ((BYTE *)&id)[0]; 
-			printf("**%s: id:%02X%02X%02X%02X\n",
-			       __FUNCTION__, pid[0], pid[1], pid[2], pid[3]); 
+			//printf("**%s: id:%02X%02X%02X%02X\n",
+			//       __FUNCTION__, pid[0], pid[1], pid[2], pid[3]); 
 			CO_WriteFilterAdd(pid);
                 }
                 else {
@@ -612,7 +643,8 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
         int oFlags = 0;
         int cFlags = 0;
         int vFlags = 0;
-        int lFlags = 0; //logflags, default
+        int lFlags = 0; //websocket logflags
+        int llFlags = 0; //local logfile logflags
         int pFlags = 0; //packet debug
         int opt;
         int timeout = 0;
@@ -622,6 +654,7 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
         char *bridgeDirectory = EO_DIRECTORY;
         char *eepFile = EO_EEP_FILE;
         char *serialPort = "\0";
+        char *modelFile = EO_MODEL_FILE;
 
         while ((opt = getopt(ac, av, "DmrocvlLpPf:d:t:e:s:z:")) != EOF) {
                 switch (opt) {
@@ -649,8 +682,8 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
                 case 'l': //WebSocket logger
                         lFlags++;
                         break;
-                case 'L': //WebSocket logger
-                        lFlags = 0;
+                case 'L': //Local logfile logger
+                        llFlags++;
                         break;
                 case 'p': //packet debug
                         pFlags++;
@@ -674,6 +707,9 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
                 case 'e':
                         eepFile = optarg;
                         break;
+                case 'g':
+                        modelFile = optarg;
+                        break;
 
                 case 't': //timeout secs for register
                         timeout = atoi(optarg);
@@ -685,16 +721,28 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
                         fprintf(stderr,
                                 "Usage: %s [-m|-r|-o][-c][-v]\n"
 				"  [-d Directory][-f Controlfile][-e EEPfile][-b BrokerFile]\n"
-				"  [-s SeriaPort][-z CommandFile]\n"
+				"  [-s SeriaPort][-z CommandFile][-t timeout seconds]\n"
                                 "    -m    Monitor mode\n"
                                 "    -r    Register mode\n"
                                 "    -o    Operation mode\n"
                                 "    -c    Clear settings before register\n"
-                                "    -v    View working status\n"
                                 "    -l    Output websocket log for logger client\n"
-                                "    -d    Bridge file directrory\n"
-                                "    -f    Control file\n"
-                                ,av[0]);
+                                "    -L    Output local logfile log\n"
+				"\n"
+                                "    -d directory   Bridge file directrory\n"
+                                "    -f file        Control file\n"
+                                "    -e eepfile     EEP file\n"
+                                "    -b brokerfile  Broker file\n"
+                                "    -s device      ESP3 serial port device name\n"
+                                "    -z commfile    Command file\n"
+                                "    -g modelfile   Model file\n"
+                                "    -t secs        Timeout seconds for register\n"
+				"  Those are options for development.\n"
+                                "    -v    View working status\n"
+                                "    -D    Add debug level\n"
+                                "    -p    Display packet debug\n"
+                                "    -P    Don't display packet debug (default)\n"
+				,av[0]);
 
 			CleanUp(0);
                         exit(EXIT_FAILURE);
@@ -704,6 +752,7 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
         p->CFlags = cFlags;
         p->VFlags = vFlags;
         p->Logger = lFlags;
+        p->LocalLog = llFlags;
         p->Timeout = timeout;
         p->ControlFile = strdup(controlFile);
         p->CommandFile = strdup(commandFile);
@@ -711,7 +760,36 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
         p->EEPFile = strdup(eepFile);
         p->BridgeDirectory = strdup(bridgeDirectory);
 	p->ESPPort = serialPort;
+	p->ModelFile = modelFile;
 	PacketDebug(pFlags);
+}
+
+int MakeSCutFields(char *line, DATAFIELD *pd, int count)
+{
+        int i = 0;
+
+	for(; i < count; i++, pd++) {
+		char *pointName; //newShotCutName
+		if (pd->DataName == NULL) {
+			continue;
+		}
+		if (!strcmp(pd->DataName, "LRN Bit")
+		    || !strcmp(pd->ShortCut, "LRNB")
+		    || !strcmp(pd->DataName, "Learn Button")) {
+			continue; // Skip Learn bit
+		}
+
+		pointName = GetNewName(pd->ShortCut);
+		if (pointName == NULL) {
+			Error("GetNewName error");
+			pointName = "ERR";
+		}
+		strcat(line, ",");
+		strcat(line, pointName);
+		free(pointName);
+		pointName = NULL;
+	}
+	return i;
 }
 
 void EoSetEep(EO_CONTROL *P, byte *Id, byte *Data, uint Rorg)
@@ -722,14 +800,16 @@ void EoSetEep(EO_CONTROL *P, byte *Id, byte *Data, uint Rorg)
 	DATAFIELD *pd;
 	FILE *f;
 	struct stat sb;
-	int rtn, i;
+	int rtn, scCount;
 	BOOL isUTE = FALSE;
         time_t      timep;
         struct tm   *time_inf;
 	char eep[12];
 	char idBuffer[12];
-	char buf[BUFSIZ];
+	char buf[DATABUFSIZ];
 	char timeBuf[64];
+	char *leadingBuffer;
+	char *trailingBuffer;
 
 	sprintf(idBuffer, "%02X%02X%02X%02X", Id[0], Id[1], Id[2], Id[3]);
 	if (P->VFlags) {
@@ -766,6 +846,7 @@ void EoSetEep(EO_CONTROL *P, byte *Id, byte *Data, uint Rorg)
 		man = Data[3] & 0x07;
 		isUTE = TRUE;
 		break;
+
 	default:
 		func = 0x00;
 		type = 0x00;
@@ -791,15 +872,8 @@ void EoSetEep(EO_CONTROL *P, byte *Id, byte *Data, uint Rorg)
 		mkdir(P->BridgeDirectory, 0777);
 	}
 	rtn = stat(P->BridgeDirectory, &sb);
-	if (!S_ISDIR(sb.st_mode)) {
+	if (!S_ISDIR(sb.st_mode) || rtn < 0) {
 		fprintf(stderr, "EoSetEep: Directory error=%s\n", P->BridgeDirectory);
-		return;
-	}
-
-	f = fopen(P->ControlPath, "a+");
-	if (f == NULL) {
-		fprintf(stderr, "EoSetEep: cannot open control file=%s\n",
-			P->ControlPath);
 		return;
 	}
 
@@ -809,47 +883,192 @@ void EoSetEep(EO_CONTROL *P, byte *Id, byte *Data, uint Rorg)
         strftime(timeBuf, sizeof(timeBuf), "%x %X", time_inf);
 	sprintf(buf, "%s,%s,%s,%s", timeBuf, idBuffer, eep, eepTable->Title);
 
-	//fwrite(buf, strlen(buf), 1, f);
-	do {
-		char *idp = index(buf, ',') + 1;
-		fwrite(idp, strlen(idp), 1, f);
-	}
-	while(0);
+        leadingBuffer = index(buf, ',') + 1; // buffer starts without time
+	trailingBuffer = buf + strlen(buf);
 
 	pe = eepTable;
 	pd = pe->Dtable;
+
+        scCount = MakeSCutFields(trailingBuffer, pd, pe->Size);
+	if (scCount == 0) {
+		fprintf(stderr, "No shortcuts here at %s, %s.\n", idBuffer, eep);
+		return;
+	}
+
+	f = fopen(P->ControlPath, "a+");
+	if (f == NULL) {
+		fprintf(stderr, "EoSetEep: cannot open control file=%s\n",
+			P->ControlPath);
+		return;
+	}
+	fwrite(leadingBuffer, strlen(leadingBuffer), 1, f);
+	fwrite("\r\n", 2, 1, f);
 	fflush(f);
+	fclose(f);		
 
-	for(i = 0; i < pe->Size; i++, pd++) {
-		char *pointName; //newShotCutName
-		if (f == NULL) {
-			fprintf(stderr, "EoSetEep: cannot open control file=%s\n",
-				P->ControlPath);
-			return;
-		}
-		
-		if (pd->DataName == NULL)
-			continue;
-		else if (!strcmp(pd->DataName, "LRN Bit") || !strcmp(pd->ShortCut, "LRNB")
-			 || !strcmp(pd->DataName, "Learn Button")) {
-			continue; // Skip Learn bit
-		}
+	if (P->VFlags) {
+		printf("EoSetEep: Done <%s %s>\n", idBuffer, eep);
+	}
+	LogMessageRegister(buf);
+}
 
-		pointName = GetNewName(pd->ShortCut);
+int MakeSCutFieldsWithCurrent(char *line, DATAFIELD *pd, int count)
+{
+	int i;
+	int scIndex;
+	DATAFIELD *basePd = pd;
+	char *currentSCuts[SC_SIZE];
+	char *pointName; //newShotCutName
+
+	for(i = 0; i < count; i++) {
+		currentSCuts[i] = NULL;
+	}
+	scIndex = 0;
+	for(i = 0; i < count; i++, pd++) {
+		pointName = pd->ShortCut;
+		printf("With[%d]:<%s>\n", i, pointName); //***1
+		pointName = GetNewNameWithCurrent(pointName, currentSCuts);
 		if (pointName == NULL) {
 			Error("GetNewName error");
-			      pointName = "ERR";
+			pointName = "ERR";
 		}
-		fprintf(f, ",%s", pointName);
-		fflush(f);
-		////free(pointName);
+		printf("NewName[%d]<%s>\n", scIndex, pointName);  //***
+		currentSCuts[scIndex++] = pointName;
+		//printf("With[%d:%d]<%s><%s>\n", i, scIndex, pointName, currentSCuts[scIndex]); //***
+
+		strcat(line, ",");
+		strcat(line, pointName);
+		printf("With[%d]!<%s>\n", i, pointName); //***2
 	}
-	fprintf(f, "\r\n");
+	pd = basePd;
+	for(i = 0; i < count; i++, pd++) {
+		if (currentSCuts[i] != NULL) {
+			if (currentSCuts[i] != pd->ShortCut) {
+				free(currentSCuts[i]);
+			}
+		}
+		else break;
+	}
+	return scIndex;
+}
+	
+void EoSetCm(EO_CONTROL *P, BYTE *Id, BYTE *Data, INT Length)
+{
+	FILE *f;
+	struct stat sb;
+	int rtn, i, scCount;
+        time_t      timep;
+	struct tm   *time_inf;
+
+	CM_TABLE *pmc; // Ponter of Model Cache
+	DATAFIELD *pd;
+	char idBuffer[12];
+	char buf[DATABUFSIZ];
+	char timeBuf[64];
+	char *pModel;
+	char *leadingBuffer;
+	char *trailingBuffer;
+	
+	extern CM_TABLE *CmGetModel(BYTE *Buf, INT Size);
+	
+	sprintf(idBuffer, "%02X%02X%02X%02X", Id[0], Id[1], Id[2], Id[3]);
+	if (P->VFlags) {
+		printf("EoSetCm:<%s>\n", idBuffer);
+	}
+
+	pmc = CmGetModel(Data, Length);
+	if (pmc == NULL) {
+		fprintf(stderr, "EoSetCm: %s invalid data for CM\n", idBuffer);
+		return;
+	}
+
+	if (P->Debug > 1) {
+		printf("**EoSetCm: CmStr=%s, Length=%d\n", pmc->CmStr, Length);
+		if (pmc->Dtable != NULL) {
+			pd = &pmc->Dtable[0];
+			for(i = 0; i < pmc->Count; i++) {
+				printf(" *** %d: DataName=%s(%p)\n", i, pd->DataName, pd->DataName);
+				printf(" *** %d: ShortCut=%s(%p)\n", i, pd->ShortCut, pd->ShortCut);
+				pd++;
+			}
+		}
+		else {
+			printf("**EoSetCm: pmc->Dtable == NULL\n");
+		}
+	}
+
+	if (P->ControlPath == NULL) {
+		P->ControlPath = MakePath(P->BridgeDirectory, P->ControlFile); 
+	}
+	if (P->ModelPath == NULL) {
+		P->ModelPath = MakePath(P->BridgeDirectory, P->ModelFile); 
+	}
+	rtn = stat(P->BridgeDirectory, &sb);
+	if (rtn < 0){
+		mkdir(P->BridgeDirectory, 0777);
+	}
+	rtn = stat(P->BridgeDirectory, &sb);
+	if (!S_ISDIR(sb.st_mode) || rtn < 0) {
+		fprintf(stderr, "EoSetEep: Directory error=%s\n", P->BridgeDirectory);
+		return;
+	}
+
+	// SetNewCm //
+	timep = time(NULL);
+        time_inf = localtime(&timep);
+        strftime(timeBuf, sizeof(timeBuf), "%x %X", time_inf);
+	sprintf(buf, "%s,%s,%s,%s", timeBuf, idBuffer, pmc->CmStr, pmc->Title);
+
+	leadingBuffer =  index(buf, ',') + 1; // buffer starts without time
+	trailingBuffer = buf + strlen(buf);
+	pd = pmc->Dtable;
+
+        scCount = MakeSCutFieldsWithCurrent(trailingBuffer, pd, pmc->Count);
+	if (scCount == 0) {
+		fprintf(stderr, "No shortcuts here at %s, %s.\n", idBuffer, pmc->CmStr);
+		return;
+	}
+
+	f = fopen(P->ControlPath, "a+");
+	if (f == NULL) {
+		fprintf(stderr, "EoSetEep: cannot open control file=%s\n",
+			P->ControlPath);
+		return;
+	}
+	fwrite(leadingBuffer, strlen(leadingBuffer), 1, f);
+	fwrite("\r\n", 2, 1, f);
 	fflush(f);
 	fclose(f);
 	
+	if (P->Debug > 1) {
+		printf("**Write CSV\n");
+		if (pmc->Dtable != NULL) {
+			pd = &pmc->Dtable[0];
+			for(i = 0; i < pmc->Count; i++) {
+				printf(" **** %d: DataName=%s(%p)\n", i, pd->DataName, pd->DataName);
+				printf(" **** %d: ShortCut=%s(%p)\n", i, pd->ShortCut, pd->ShortCut);
+				pd++;
+			}
+		}
+	}
+
+        // Convert and save key-record
+        f = fopen(P->ModelPath, "a+");
+	pModel = CmBinToText(Data, Length);
+	if (pModel != NULL ) {
+		fwrite(pModel, strlen(pModel), 1, f);
+		fflush(f);
+		if (P->Debug > 1) {
+			printf("Model: <%s>\n", pModel);
+		}
+	}
+	fclose(f);
+	free(pModel);
+	if (P->Debug > 1) {
+		printf("**Write Profile\n");
+	}
 	if (P->VFlags) {
-		printf("EoSetEep: Done <%s %s>\n", idBuffer, eep);
+		printf("EoSetCm: Done <%s %s>\n", idBuffer, pmc->CmStr);
 	}
 	LogMessageRegister(buf);
 }
@@ -861,6 +1080,10 @@ void EoReloadControlFile()
 	if (p->ControlPath == NULL) {
 		p->ControlPath = MakePath(p->BridgeDirectory, p->ControlFile); 
 	}
+	if (p->ModelPath == NULL) {
+		p->ModelPath = MakePath(p->BridgeDirectory, p->ModelFile); 
+	}
+	(VOID) ReadModel(p->ModelPath);
 	p->ControlCount = ReadCsv(p->ControlPath);
 }
 
@@ -877,6 +1100,9 @@ void LogMessageRegister(char *buf)
 			       loggedOK ? "OK" : "FAILED");
 		}
 	}
+	if (p->LocalLog > 0) {
+		EoLogRaw(buf);
+	}
 }
 
 void LogMessageStart(uint Id, char *Eep)
@@ -886,7 +1112,7 @@ void LogMessageStart(uint Id, char *Eep)
 	struct tm   *time_inf;
 	char        buf[64];
   
-	if (p->Logger > 0) {
+	if (p->Logger > 0 || p->LocalLog > 0) {
 		timep = time(NULL);
 		time_inf = localtime(&timep);
 		strftime(buf, sizeof(buf), "%x %X", time_inf);
@@ -903,7 +1129,7 @@ void LogMessageAdd(char *Point, double Data, char *Unit)
 {
 	EO_CONTROL *p = &EoControl;
 	char buf[128];
-	if (p->Logger > 0) {
+	if (p->Logger > 0 || p->LocalLog > 0) {
 		sprintf(buf, "%s=%.2lf%s ", Point, Data, Unit);
 		strcat(EoLogMonitorMessage, buf);
 	}
@@ -913,7 +1139,7 @@ void LogMessageAddInt(char *Point, int Data)
 {
 	EO_CONTROL *p = &EoControl;
 	char buf[128];
-	if (p->Logger > 0) {
+	if (p->Logger > 0 || p->LocalLog > 0) {
 		sprintf(buf, "%s=%d ", Point, Data);
 		strcat(EoLogMonitorMessage, buf);
 	}
@@ -923,7 +1149,7 @@ void LogMessageAddDbm(byte Data)
 {
 	EO_CONTROL *p = &EoControl;
 	char buf[128];
-	if (p->Logger > 0) {
+	if (p->Logger > 0 || p->LocalLog > 0) {
 		sprintf(buf, "-%d ", Data);
 		strcat(EoLogMonitorMessage, buf);
 	}
@@ -932,8 +1158,8 @@ void LogMessageAddDbm(byte Data)
 void LogMessageMonitor(char *Eep, char *Message)
 {
 	EO_CONTROL *p = &EoControl;
-	char buf[BUFSIZ/2];
-	if (p->Logger > 0) {
+	char buf[DATABUFSIZ];
+	if (p->Logger > 0 || p->LocalLog > 0) {
 		sprintf(buf, "%s,%s", Eep ? Eep : NULL, Message);
 		strcat(EoLogMonitorMessage, buf);
 	}
@@ -952,6 +1178,9 @@ void LogMessageOutput()
 			       loggedOK ? "OK" : "FAILED");
 		}
 	}
+	if (p->LocalLog > 0) {
+		EoLogRaw(EoLogMonitorMessage);
+	}
 }
 
 //
@@ -964,8 +1193,8 @@ void PrintTelegram(EO_PACKET_TYPE PacketType, byte *Id, byte ROrg, byte *Data, i
 	BOOL teachIn = FALSE;
 	time_t      timep;
 	struct tm   *time_inf;
-	char buf[BUFSIZ/2];
-	char eepbuf[32];
+	char buf[MAINBUFSIZ];
+	char eepbuf[128];
 	char timebuf[64];
 
 	//Warn("call LogMessageStart()");
@@ -1010,6 +1239,24 @@ void PrintTelegram(EO_PACKET_TYPE PacketType, byte *Id, byte ROrg, byte *Data, i
 		sprintf(buf, "UTE:%02X %02X %02X %02X %02X %02X %02X -%d",
 			Data[0], Data[1], Data[2], Data[3], Data[4], Data[5], Data[6], Data[Dlen + 4]);
 		break;
+
+	case 0xB0: // CM_TI:
+		teachIn = TRUE;
+		CmPrintTI((BYTE *)buf, (BYTE *)eepbuf, (BYTE *)Data, Dlen - 6);
+		break;
+
+	case 0xB1: // CM_TR:
+		CmPrintTR((BYTE *)buf, (BYTE *)Data, Dlen - 6);
+		break;
+
+	case 0xB2: // CM_CD:
+		CmPrintCD((BYTE *)buf, (BYTE *)Data, Dlen - 6);
+		break;
+
+	case 0xB3: // CM_SD:
+		CmPrintSD((BYTE *)buf, (BYTE *)Data, Dlen - 6);
+		break;
+
 	default:
 		buf[0] = '\0';
 		break;
@@ -1039,6 +1286,7 @@ void PrintTelegram(EO_PACKET_TYPE PacketType, byte *Id, byte ROrg, byte *Data, i
 		teachIn = TRUE;
 		strcpy(eepbuf, "D2-03-20");
 	}
+	
 	if (teachIn) {
 		printf("%s [%s]\n", buf, eepbuf);
 	}
@@ -1052,6 +1300,8 @@ void PrintTelegram(EO_PACKET_TYPE PacketType, byte *Id, byte ROrg, byte *Data, i
 }
 
 //
+// Keep this function here for logging messages.
+//
 void WriteBridge(char *FileName, double ConvertedData, char *Unit)
 {
 	EO_CONTROL *p = &EoControl;
@@ -1060,6 +1310,8 @@ void WriteBridge(char *FileName, double ConvertedData, char *Unit)
 	BOOL isIntData = Unit == NULL || *Unit == '\0';
 	INT data = (INT) ConvertedData;
 
+	//printf("##%s: data=%d, isIntData=%d\n", FileName, data, isIntData); 
+	
 	f = fopen(bridgePath, "w");
 	//Warn("call LogMessageAdd()");
 	if (isIntData) {
@@ -1127,7 +1379,7 @@ RETURN_CODE InitBrokers()
 	int i;
 	FILE *f;
 	char *rtn;
-	char buf[BUFSIZ];
+	char buf[DATABUFSIZ];
 
 	if (p->BrokerPath != NULL) {
 		return OK;
@@ -1142,7 +1394,7 @@ RETURN_CODE InitBrokers()
 	memset(&BrokerTable[0], 0, sizeof(BROKERS) * MAX_BROKER);
 
 	for(i = 0; i < MAX_BROKER; i++) {
-		rtn = fgets(buf, BUFSIZ, f);
+		rtn = fgets(buf, DATABUFSIZ, f);
 		if (rtn == NULL) {
 			break;
 		}
@@ -1197,6 +1449,90 @@ void NotifyBrokers(long num)
 }
 
 //
+void PushPacket(BYTE *Buffer)
+{
+        EO_CONTROL *p = &EoControl;
+	CDM_BUFFER *pb;
+	INT totalDataLength = 0;
+	INT optionLength;
+	INT length = 0;
+	INT thisDataLength;
+	INT seq;
+	INT index;
+	BYTE *data;
+	const int rOrgByte = 1;
+	const int cdmHeader = 2;
+
+	length = (int) (Buffer[0] << 8 | Buffer[1]);
+	optionLength = (int) Buffer[2];
+
+	data = &Buffer[HEADER_SIZE + 2]; // Header(5) + R-ORG(1) + seq/index
+	thisDataLength = length - HEADER_SIZE - 2; // oR-ORG + seq/index = 2
+	seq = Buffer[6] >> 6;
+	index = Buffer[6] & 0x3F;
+
+	pb = &CdmBuffer[seq];
+
+	if (index == 0) { // new CDM comming
+
+		data += cdmHeader; // CDM Hdr(2)
+
+		totalDataLength = (int) (Buffer[7] << 8 | Buffer[8]);
+		thisDataLength -= (cdmHeader + rOrgByte);
+
+		pb->Length = totalDataLength;
+		pb->OptionLength = optionLength;
+		pb->CurrentLength = 0;
+
+		pb->Id[0] = Buffer[length];
+		pb->Id[1] = Buffer[length + 1];
+		pb->Id[2] = Buffer[length + 2];
+		pb->Id[3] = Buffer[length + 3];
+		pb->Status = Buffer[length + 4];
+
+		memcpy(&pb->Buffer[HEADER_SIZE], data, thisDataLength + rOrgByte);
+	}
+	else {
+		memcpy(&pb->Buffer[HEADER_SIZE + pb->CurrentLength + rOrgByte], data, thisDataLength);
+	}
+
+	if (p->Debug > 0) {
+		printf("CM %d-%d: dat=%d cur=%d opt=%d tot=%d this=%d\n",
+		       seq, index, length, pb->CurrentLength, pb->OptionLength, pb->Length, thisDataLength);
+	}
+
+	data = &pb->Buffer[pb->CurrentLength + HEADER_SIZE];
+	//printf("CM copied data(%d): %02X %02X %02X %02X %02X %02X %02X\n", pb->CurrentLength,
+	//       data[0], data[1], data[2], data[3], data[4], data[5], data[6]);
+
+	pb->CurrentLength += thisDataLength;
+	
+	if (pb->CurrentLength >= pb->Length) {
+		//Make Header
+		pb->Buffer[0] = (HEADER_SIZE + pb->Length + rOrgByte) >> 8;
+		pb->Buffer[1] = (HEADER_SIZE + pb->Length + rOrgByte) & 0xFF;
+		pb->Buffer[2] = optionLength;
+		pb->Buffer[3] = 1; // Type: RADIO_ERP1
+		pb->Buffer[4] = 0; // CRC
+
+		if (p->Debug > 0) {
+			//Make Trailer
+			printf("CM %d-%d: thisLen=%d Queue=%d,%d opt=%d,%d\n", seq, index, thisDataLength,
+			       pb->CurrentLength, pb->Length, optionLength, pb->OptionLength);
+
+			if (p->Debug > 1) {		
+				data = &pb->Buffer[5];
+				printf("CM Data: %02X %02X %02X %02X %02X %02X %02X\n",
+				       data[0], data[1], data[2], data[3], data[4], data[5], data[6]);
+			}
+		}
+		memcpy(&pb->Buffer[HEADER_SIZE + pb->Length + rOrgByte], &Buffer[length], optionLength);
+
+		QueueData(&DataQueue, pb->Buffer, HEADER_SIZE + pb->Length + rOrgByte + optionLength);
+	}
+}
+
+//
 bool MainJob(BYTE *Buffer)
 {
 	EO_CONTROL *p = &EoControl;
@@ -1208,6 +1544,8 @@ bool MainJob(BYTE *Buffer)
 	BYTE rOrg;
 	BYTE status = 0;
 	BOOL teachIn = FALSE;
+	BOOL newIdComming = FALSE;
+	BOOL D2_Special = FALSE;
 	extern void PrintItems(); //// DEBUG control.c
 	extern void PrintProfileAll();
 	extern int GetTableIndex(UINT Id);
@@ -1216,8 +1554,14 @@ bool MainJob(BYTE *Buffer)
 	optionLength = (int) Buffer[2];
 	packetType = (EO_PACKET_TYPE) Buffer[3];
 	rOrg = Buffer[5];
-	//bzero(data, 16);
 
+	if (p->Debug > 0) {
+		PacketDump(Buffer);
+		printf("D:dLen=%d oLen=%d tot=%d typ=%02X org=%02X\n",
+		       dataLength, optionLength, (dataLength + optionLength),
+		       packetType, rOrg);
+	}
+	
 	id[0] = Buffer[dataLength];
 	id[1] = Buffer[dataLength + 1];
 	id[2] = Buffer[dataLength + 2];
@@ -1242,11 +1586,27 @@ bool MainJob(BYTE *Buffer)
 			// D2-03-20
 			printf("**VLD teachIn=D2-03-20\n");
 			teachIn = TRUE;
+			D2_Special = TRUE;
 		}
 		break;
 	case 0xD4:  // UTE
                 teachIn = 1;
 		break;
+	case 0x40: // CDM
+		PushPacket(Buffer);
+		break;
+
+	case 0xB0: // CM_TI:
+		teachIn = TRUE; // CM Teach-In
+	case 0xB1: // CM_TR:
+	case 0xB2: // CM_CD:
+	case 0xB3: // CM_SD:
+		if (p->Debug > 1) {
+			printf("%02X: ", rOrg);
+			DataDump(data, dataLength - 6);
+		}
+		break;
+
 	default:
 		fprintf(stderr, "%s: Unknown rOrg = %02X (%d %d)\n",
 			__FUNCTION__, rOrg, dataLength, optionLength);
@@ -1261,61 +1621,52 @@ bool MainJob(BYTE *Buffer)
 	}
 
 	if (p->VFlags)
-		printf("id:%02X%02X%02X%02X %s\n", id[0] , id[1] , id[2] , id[3], teachIn ? "T" : "");
+		printf("mode:%s id:%02X%02X%02X%02X rOrg:%02X %s\n", //here!
+		       p->Mode == Register ? "Register" : p->Mode == Operation ? "Operation" : "Monitor",
+		       id[0] , id[1] , id[2] , id[3], rOrg, teachIn ? "T" : "");
 
 	if (teachIn && p->Mode == Monitor) {
 		// This process for Minitor and Register Mode //
 		PrintTelegram(packetType, id, rOrg, data, dataLength, optionLength);
 	}
 	else if (teachIn && p->Mode == Register) {
+
+		newIdComming = !CheckTableId(ByteToId(id));
+			
 		switch(rOrg) {
 		case 0xF6: //RPS:
-			if (!CheckTableId(ByteToId(id))) {
-				// is not duplicated, then register
-				EoSetEep(p, id, data, rOrg);
-			}
-			break;
-
 		case 0xD5: //1BS:
-			if (!CheckTableId(ByteToId(id))) {
-				// is not duplicated, then register
-				EoSetEep(p, id, data, rOrg);
-			}
-			break;
-
-
 		case 0xD2: //VLD:
-			if (!CheckTableId(ByteToId(id))) {
-				// is not duplicated, then register
-				EoSetEep(p, id, data, rOrg);
-			}
-			break;
-
 		case 0xA5: //4BS
-			if (!CheckTableId(ByteToId(id))) {
+		case 0xD4: //UTE
+			if (newIdComming) {
 				// is not duplicated, then register
 				EoSetEep(p, id, data, rOrg);
+				EoReloadControlFile();
+				//PrintEepAll();
+				//PrintProfileAll();
 			}
 			break;
-
-		case 0xD4: //UTE
-			if (!CheckTableId(ByteToId(id))) {
+			
+		case 0xB0: // CM_TI:
+			if (newIdComming) {
 				// is not duplicated, then register
-				EoSetEep(p, id, data, rOrg);
+				EoSetCm(p, id, data, dataLength - 6);
+				EoReloadControlFile();
+				//PrintEepAll();
+				//PrintProfileAll();
 			}
+			break;
+			
 		default:
 			break;
 		}
-
-		EoReloadControlFile();
-		
-		//PrintEepAll();
-		//PrintProfileAll();
 	}
 	else if (p->Mode == Monitor) {
 		PrintTelegram(packetType, id, rOrg, data, dataLength, optionLength);
 	}
-	else if (p->Mode == Operation || teachIn && (rOrg == 0xD2 || rOrg == 0xF6)) {
+	//else if (p->Mode == Operation || teachIn && (rOrg == 0xD2 || rOrg == 0xF6)) {
+	else if (p->Mode == Operation) {
 		// Report details for log
 		char *GetTableEep(uint Target);
 		int nodeIndex = -1;
@@ -1342,7 +1693,7 @@ bool MainJob(BYTE *Buffer)
 			break;
 			
 		case 0xD2: //VLD:
-			if (CheckTableId(ByteToId(id))) {
+			if (D2_Special || !teachIn && CheckTableId(ByteToId(id))) {
 				WriteVldBridgeFile(ByteToId(id), data);
 				nodeIndex = GetTableIndex(ByteToId(id));
 				if (nodeIndex >= 0) {
@@ -1353,7 +1704,7 @@ bool MainJob(BYTE *Buffer)
 			break;
 
 		case 0xA5: //4BS:
-			if (CheckTableId(ByteToId(id))) {
+			if (!teachIn && CheckTableId(ByteToId(id))) {
 				Write4bsBridgeFile(ByteToId(id), data);
 				nodeIndex = GetTableIndex(ByteToId(id));
 				if (nodeIndex >= 0) {
@@ -1363,12 +1714,35 @@ bool MainJob(BYTE *Buffer)
 			}
 			break;
 
+		case 0xB2: //CM_CD:
+			if (CheckTableId(ByteToId(id))) {
+				WriteCdBridgeFile(ByteToId(id), data);
+				nodeIndex = GetTableIndex(ByteToId(id));
+				if (nodeIndex >= 0) {
+					if (!teachIn)
+						NotifyBrokers((long) nodeIndex);
+				}
+			}
+			break;
+
+		case 0xB3: //CM_SD:
+			if (CheckTableId(ByteToId(id))) {
+				WriteSdBridgeFile(ByteToId(id), data);
+				nodeIndex = GetTableIndex(ByteToId(id));
+				if (nodeIndex >= 0) {
+					if (!teachIn)
+						NotifyBrokers((long) nodeIndex);
+				}
+			}
+			break;
+
 		case 0xD4: //UTE
+		//case 0xB0: //CM_TI:
+		//case 0xB1: //CM_TR:
 		default:
 			break;
 		}
 		LogMessageAddDbm(data[dataLength + 4]);
-		//Warn("call LogMessageOutput()");
 		LogMessageOutput();
 	}
 	
@@ -1399,7 +1773,9 @@ int main(int ac, char **av)
 	//extern void PrintEepAll();
 	extern void PrintProfileAll();
 
-        printf("**main() pid=%d\n", myPid);
+        if (p->Debug > 1) {
+		printf("**main() pid=%d\n", myPid);
+	}
         printf("%s%s", version, copyright);
 
 	// Signal handling
@@ -1428,6 +1804,10 @@ int main(int ac, char **av)
 	////free(p->PidPath);
 	if (InitBrokers() != OK) {
 		fprintf(stderr, "No broker notify mode\n");
+	}
+
+	if (p->LocalLog) {
+		(void) EoLogInit("dpr", ".log");
 	}
 
 	MonitorStart();

@@ -44,8 +44,8 @@ typedef struct _tagname {
 	char *value;
 } TAGNAME;
 
-#define FIELD_SIZE 256
-#define EEP_SIZE 512
+#define FIELD_SIZE (256)
+#define EEP_SIZE (384)
 
 static TAGNAME TagTable[] = {
 	{"eep", 0}, //0
@@ -113,6 +113,9 @@ static ENUMTABLE EnumTable[ENUM_SIZE];
 static int EnumTableIndex;
 
 int debug = 0;
+const char *_value_type_string[4] = {
+        "Not used", "Data", "Flag", "Enum"
+};
 
 #define _DD if (debug > 1)
 #define _D if (debug > 0)
@@ -177,7 +180,7 @@ void SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DAT
 	DATAFIELD *table = NULL;
 	DATAFIELD *pt;
 	char *pp;
-	int i;
+	int i, j;
 
 	_D printf("SaveEep: %d <%s><%s><%s>\n",
 		  FieldCount, EepString, Title, Pd ? Pd->DataName : "");
@@ -208,10 +211,10 @@ void SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DAT
 		   EepString, (uint) sizeof(DATAFIELD), FieldCount, tableSize);
 	for(i = 0; i < FieldCount; i++) {
 		if (Pd->DataName) {
-			if (Pd->DataName) {
-				pt->DataName = strdup(Pd->DataName);
-				if (pt->DataName == NULL)
-					Warn("DataName: strdup() error");
+			pt->ValueType = Pd->ValueType;
+			pt->DataName = strdup(Pd->DataName);
+			if (pt->DataName == NULL) {
+				Warn("DataName: strdup() error");
 			}
 			if (Pd->ShortCut) {
 				pt->ShortCut = strdup(Pd->ShortCut);
@@ -228,6 +231,17 @@ void SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DAT
 				pt->Unit = strdup(Pd->Unit);
 				if (pt->Unit == NULL)
 					Warn("Unit: strdup() error");
+			}
+			if (Pd->EnumDesc[0].Desc != NULL) {
+				for(j = 0; j < ENUM_SIZE; j++) {
+					if (Pd->EnumDesc[j].Desc == NULL) {
+						break;
+					}
+					pt->EnumDesc[j].Index = Pd->EnumDesc[j].Index;
+					pt->EnumDesc[j].Desc = strdup(Pd->EnumDesc[j].Desc);
+					if (pt->EnumDesc[j].Desc == NULL)
+						Warn("Unit: strdup() error");
+				}
 			}
 		}
 		pt++, Pd++;
@@ -290,7 +304,7 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
 
 			    pd = &dataTable[0];
 			    for(i = 0; i < FIELD_SIZE; i++, pd++) {
-				    pd->Reserved = 0;
+				    pd->ValueType = NotUsed;
 				    if (pd->DataName) {
 					    free(pd->DataName);
 					    pd->DataName = NULL;
@@ -347,7 +361,7 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
 		    if (stateFunc) {
 			    _DD printf("---> <%s>\n", TagTable[state].name);
 			    if (state == TAG_RESERVED) {
-				    dataTable[dataTableIndex].Reserved = 1;
+				    dataTable[dataTableIndex].ValueType = Data;
 			    }
 		    }
 		    break;
@@ -399,24 +413,26 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
 		    _D printf("*EEP:%s (%d) <%s>\n", eepString, dataTableIndex, FuncTitle);
 		    pd = &dataTable[0];
 		    for(i = 0; i < dataTableIndex; i++, pd++){
-			    if (pd->Reserved) {
+			    if (pd->ValueType) {
 				    //this field is reserved
 				    continue;
 			    }
-			    _D printf("%d[%s]:%s ofs=%d siz=%d rmin=%d rmax=%d smin=%.3f smax=%.3f u=%s\n",
-				   i,
-				   pd->DataName,
-				   pd->ShortCut,
-				   pd->BitOffs,
-				   pd->BitSize,
-				   pd->RangeMin,
-				   pd->RangeMax,
-				   pd->ScaleMin,
-				   pd->ScaleMax,
-				   pd->Unit);
+			    _D printf("%d[%s]:%s %d ofs=%d siz=%d rmin=%d rmax=%d smin=%.3f smax=%.3f u=%s\n",
+				      i,
+				      pd->DataName,
+				      pd->ShortCut,
+				      pd->ValueType,
+				      pd->BitOffs,
+				      pd->BitSize,
+				      pd->RangeMin,
+				      pd->RangeMax,
+				      pd->ScaleMin,
+				      pd->ScaleMax,
+				      pd->Unit);
 
 			    if (pd->EnumDesc[0].Desc != NULL) {
-				    _D printf("EnumDesc:");
+				    pd->ValueType = Enum;
+				    _D printf("EnumDesc[%s]:", eepString);
 				    for(j = 0; j < ENUM_SIZE; j++) {
 					    if (pd->EnumDesc[j].Desc == NULL)
 						    break;
@@ -424,6 +440,9 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
 						   pd->EnumDesc[j].Index, pd->EnumDesc[j].Desc);
 				    }
 				    _D printf(".\n");
+			    }
+			    else {
+				     pd->ValueType = Data;
 			    }
 		    }
                     _DD printf("<<end index=%d>>\n", i);
@@ -463,8 +482,13 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
 				    for(j = 0; j < EnumTableIndex; j++) {
 					    StringCopy(&pd->EnumDesc[j].Desc, EnumTable[j].Desc);
 					    pd->EnumDesc[j].Index = EnumTable[j].Index;
+					    _D printf("EnumCopied(%d): %s,%s\n", j, pd->EnumDesc[j].Desc, EnumTable[j].Desc);
 				    }
+
 				    EnumTableIndex = 0;
+			    }
+			    else {
+				    _D printf("No Enum data: %d\n", pd->ValueType);
 			    }
 			    stateDatafield = 0;
 			    dataTableIndex++;
@@ -566,16 +590,29 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
 
 void PrintNode(DATAFIELD *pd, int Size)
 {
-	int i;
+	int i, j;
 
 	for(i = 0; i < Size; i++) {
 		if (pd->DataName)
-			printf(" %s:%s %d %d %d %d %.3f %.3f  %s\n",
+			printf(" %s:%s(%s) %d %d %d %d %.3f %.3f  %s\n",
+			       _value_type_string[pd->ValueType],
 			       pd->DataName, pd->ShortCut,
 			       pd->BitOffs, pd->BitSize,
 			       pd->RangeMin, pd->RangeMax,
 			       pd->ScaleMin, pd->ScaleMax,
 			       pd->Unit);
+		
+		//penum = &pd->EnumDesc[0];
+		//if (penum->Desc != NULL) {
+		if (pd->EnumDesc[0].Desc != NULL) {
+			for(j = 0; j < EnumTableIndex; j++) {
+				if (pd->EnumDesc[j].Desc == NULL)
+					break;
+				printf("  ENUM %d: %d<%s>\n", j,
+				       pd->EnumDesc[j].Index,
+				       pd->EnumDesc[j].Desc);
+			}
+		}
 		pd++;
 	}
 }
@@ -587,7 +624,7 @@ void PrintEepAll()
 
 	while(pe->Eep[0] != '\0' ) {
 		if (pe->Size > 0) {
-			printf("**%s %d %s: %d\n", __FUNCTION__, fcnt, pe->Eep, pe->Size);
+			printf("**%s %d %s: %d <%s>\n", __FUNCTION__, fcnt, pe->Eep, pe->Size, pe->Title);
 			PrintNode(pe->Dtable, pe->Size);
 		}
 		pe++, fcnt++;

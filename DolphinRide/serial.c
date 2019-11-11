@@ -22,13 +22,27 @@ VOID PacketDebug(INT flag)
 
 VOID PacketDump(BYTE *p)
 {
+	int i;
+	int length = p[0] << 8 | p[1];
+	int realLength = length;
+
 	if (_GetPacketDebug > 0) {
-		printf("%02X %02X %02X %02X %02X %02X %02X %02X  ",
+		if (length < 8)
+			length = 8;
+		else if (length > 32)
+			length = 32;
+		length -= 8;
+	
+		printf("[%02X%02X%02X%02X:%d] %02X %02X %02X %02X %02X %02X %02X %02X  ",
+		       p[realLength], p[realLength + 1], p[realLength + 2], p[realLength + 3], realLength, 
 		       p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
-		printf("%02X %02X %02X %02X %02X %02X %02X %02X ",
-		       p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]);
-		printf("%02X %02X %02X %02X %02X %02X %02X %02X\n",
-		       p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23]);
+		p += 8;
+		for(i = 0; i < length; i++) {
+			printf("%02X ", *p++);
+			if (i % 8 == 7)
+				printf(" ");
+		}
+		printf("\n");
 	}
 }
 

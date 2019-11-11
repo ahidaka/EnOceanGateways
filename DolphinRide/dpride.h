@@ -21,13 +21,16 @@ enum _boolvalue { false = 0, true = 1};
 #define EO_CONTROL_FILE "eofilter.txt"
 #define EO_COMMAND_FILE "eoparam.txt"
 #define EO_EEP_FILE "eep.xml"
-#define EO_FILTER_SIZE (128)
+#define EO_MODEL_FILE "profiles.txt"
+#define EO_FILTER_SIZE (256)
 
 #define BROKER_FILE "brokers.txt"
-#define MAX_BROKER (16)
+#define MAX_BROKER (8)
 #define PID_FILE "dpride.pid"
 #define SIG_BROKERS (SIGRTMIN + 6)
 
+#define NODE_TABLE_SIZE (256) // Number of registerd ID
+#define SC_SIZE (64) // Number of data points for each node
 //
 typedef enum _eo_file_op
 {
@@ -45,6 +48,7 @@ typedef struct _eo_control
         int CFlags;
         int VFlags;
         int Logger;
+        int LocalLog;
         int Timeout;
 	EO_FILE_OP FilterOp;
         int Debug;
@@ -58,6 +62,9 @@ typedef struct _eo_control
         char *BrokerPath;
 	char *PidPath;
         char *EEPFile;
+        char *LogFile;
+        char *ModelFile;
+        char *ModelPath;
         char *BridgeDirectory;
         char *ESPPort;
 
@@ -96,6 +103,18 @@ typedef enum _eo_packet_type
 } EO_PACKET_TYPE;
 
 //
+// Control file node table
+//
+typedef struct _node_table {
+        unsigned int Id;
+        char *Eep;
+        char *Desc;
+        int SCCount;
+        char **SCuts;
+        //CM_TABLE *Model; // Pointer to ModelCache table
+} NODE_TABLE;
+
+//
 //
 #define Warn(msg)  fprintf(stderr, "#WARN %s: %s\n", __FUNCTION__, msg)
 #define Error(msg)  fprintf(stderr, "*ERR %s: %s\n", __FUNCTION__, msg)
@@ -123,11 +142,15 @@ void EoSetEep(EO_CONTROL *P, byte *Id, byte *Data, uint Rorg);
 
 bool CheckTableId(uint Target);
 
-bool CheckTableEep(char *Target);
-
 char *GetNewName(char *Target);
 
+char *GetNewNameWithCurrent(char *Target, char **List);
+
 int ReadCsv(char *Filename);
+
+int ReadModel(char *Filename);
+
+int CacheProfiles(void);
 
 int ReadCmd(char *Filename, int *Mode, char *Param);
 
@@ -141,10 +164,22 @@ void Write4bsBridgeFile(uint Id, byte *Data);
 
 void WriteVldBridgeFile(uint Id, byte *Data);
 
+void WriteCdBridgeFile(uint Id, byte *Data);
+
+void WriteSdBridgeFile(uint Id, byte *Data);
+
 void WriteBridge(char *FileName, double ConvertedData, char *Unit);
 
 void LogMessageStart(uint Id, char *Eep);
 
+FILE *EoLogInit(char *Prefix, char *Extension);
+
+void EoLog(char *id, char *eep, char *msg);
+
+void EoLogRaw(char *Msg);
+//
+//
+//
 static inline void DataToEep(byte *data, uint *pFunc, uint *pType, uint *pMan)
 {
         uint func = ((uint)data[0]) >> 2;
@@ -188,3 +223,4 @@ static inline void IdToByte(char *p, unsigned int id)
         }
 #undef mkchar
 }
+

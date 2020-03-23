@@ -221,6 +221,7 @@ void SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DAT
 				if (pt->ShortCut == NULL)
 					Warn("ShortCut: strdup() error");
 			}
+			//pt->ValueType = Pd->ValueType ? Pd->ValueType : VT_Data;
 			pt->BitOffs = Pd->BitOffs;
 			pt->BitSize = Pd->BitSize;
 			pt->RangeMin = Pd->RangeMin;
@@ -304,7 +305,7 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
 
 			    pd = &dataTable[0];
 			    for(i = 0; i < FIELD_SIZE; i++, pd++) {
-				    pd->ValueType = NotUsed;
+				    pd->ValueType = VT_NotUsed;
 				    if (pd->DataName) {
 					    free(pd->DataName);
 					    pd->DataName = NULL;
@@ -361,7 +362,7 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
 		    if (stateFunc) {
 			    _DD printf("---> <%s>\n", TagTable[state].name);
 			    if (state == TAG_RESERVED) {
-				    dataTable[dataTableIndex].ValueType = Data;
+				    dataTable[dataTableIndex].ValueType = VT_Data;
 			    }
 		    }
 		    break;
@@ -431,7 +432,7 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
 				      pd->Unit);
 
 			    if (pd->EnumDesc[0].Desc != NULL) {
-				    pd->ValueType = Enum;
+				    pd->ValueType = VT_Enum;
 				    _D printf("EnumDesc[%s]:", eepString);
 				    for(j = 0; j < ENUM_SIZE; j++) {
 					    if (pd->EnumDesc[j].Desc == NULL)
@@ -442,7 +443,7 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
 				    _D printf(".\n");
 			    }
 			    else {
-				     pd->ValueType = Data;
+				     pd->ValueType = VT_Data;
 			    }
 		    }
                     _DD printf("<<end index=%d>>\n", i);
@@ -636,7 +637,7 @@ void PrintEep(char *EEP)
 	EEP_TABLE *pe = EepTable;
 	while(pe->Eep[0] != '\0' ) {
 		if (!strcmp(EEP, pe->Eep)) {
-			printf("%s: %d\n", pe->Eep, pe->Size);
+			printf("%s: %d <%s>\n", pe->Eep, pe->Size, pe->Title);
 			if (pe->Size > 0) {
 				PrintNode(pe->Dtable, pe->Size);
 			}
@@ -664,7 +665,7 @@ int InitEep(char *Profile)
 	int numField;
 	static DATAFIELD D2_03_20_ES =
 	{
-		0,
+		3,
 		"Energy Supply",
 		"ES",
 		0, //Bitoffs
@@ -680,7 +681,7 @@ int InitEep(char *Profile)
 	static DATAFIELD D2_32_00[4] =
 	{
 		{
-			0,
+			3,
 			"Power Fail",
 			"PF",
 			0, //Bitoffs
@@ -690,10 +691,10 @@ int InitEep(char *Profile)
 			0, //ScaleMin
 			1, //ScaleMax
 			"", //Unit
-			{{0, NULL}}, //Enum
+			{{0, "False"},{1, "True"}}, //Enum
 		},
 		{
-			0,
+			3,
 			"Divisor for all channels",
 			"DIV",
 			1, //Bitoffs
@@ -703,10 +704,10 @@ int InitEep(char *Profile)
 			0, //ScaleMin
 			1, //ScaleMax
 			"", //Unit
-			{{0, NULL}}, //Enum
+			{{0, "x/1"},{1, "x/10"}}, //Enum
 		},
 		{
-			0,
+			1,
 			"Current value",
 			"CH",
 			8, //Bitoffs
@@ -726,7 +727,7 @@ int InitEep(char *Profile)
 	static DATAFIELD D2_32_01[5] =
 	{
 		{
-			0,
+			3,
 			"Power Fail",
 			"PF",
 			0, //Bitoffs
@@ -736,10 +737,10 @@ int InitEep(char *Profile)
 			0, //ScaleMin
 			1, //ScaleMax
 			"", //Unit
-			{{0, NULL}}, //Enum
+			{{0, "False"},{1, "True"}}, //Enum
 		},
 		{
-			0,
+			3,
 			"Divisor for all channels",
 			"DIV",
 			1, //Bitoffs
@@ -749,10 +750,10 @@ int InitEep(char *Profile)
 			0, //ScaleMin
 			1, //ScaleMax
 			"", //Unit
-			{{0, NULL}}, //Enum
+			{{0, "x/1"},{1, "x/10"}}, //Enum
 		},
 		{
-			0,
+			1,
 			"Current value",
 			"CH",
 			8, //Bitoffs
@@ -765,7 +766,7 @@ int InitEep(char *Profile)
 			{{0, NULL}}, //Enum
 		},
 		{
-			0,
+			1,
 			"Current value",
 			"CH",
 			20, //Bitoffs
@@ -785,7 +786,7 @@ int InitEep(char *Profile)
 	static DATAFIELD D2_32_02[6] =
 	{
 		{
-			0,
+			3,
 			"Power Fail",
 			"PF",
 			0, //Bitoffs
@@ -795,10 +796,10 @@ int InitEep(char *Profile)
 			0, //ScaleMin
 			1, //ScaleMax
 			"", //Unit
-			{{0, NULL}}, //Enum
+			{{0, "False"},{1, "True"}}, //Enum
 		},
 		{
-			0,
+			3,
 			"Divisor for all channels",
 			"DIV",
 			1, //Bitoffs
@@ -808,10 +809,10 @@ int InitEep(char *Profile)
 			0, //ScaleMin
 			1, //ScaleMax
 			"", //Unit
-			{{0, NULL}}, //Enum
+			{{0, "x/1"},{1, "x/10"}}, //Enum
 		},
 		{
-			0,
+			1,
 			"Current value",
 			"CH",
 			8, //Bitoffs
@@ -824,7 +825,7 @@ int InitEep(char *Profile)
 			{{0, NULL}}, //Enum
 		},
 		{
-			0,
+			1,
 			"Current value",
 			"CH",
 			20, //Bitoffs
@@ -837,7 +838,7 @@ int InitEep(char *Profile)
 			{{0, NULL}}, //Enum
 		},
 		{
-			0,
+			1,
 			"Current value",
 			"CH",
 			32, //Bitoffs
@@ -848,6 +849,117 @@ int InitEep(char *Profile)
 			4095, //ScaleMax
 			"A", //Unit
 			{{0, NULL}}, //Enum
+		},
+		{
+			1,"","",0,0,0,0,0,0,"",{{0, NULL}},
+		}
+	};						
+
+	static DATAFIELD D2_14_41[10] =
+	{
+		{
+			1,
+			"Temperature 10",
+			"TP",
+			0, //Bitoffs
+			10, //Bitsize
+			0, //RangeMin
+			1000, //RangeMax
+			-40, //ScaleMin
+			60, //ScaleMax
+			"℃", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,
+			"Humidity",
+			"HU",
+			10, //Bitoffs
+			8, //Bitsize
+			0, //RangeMin
+			200, //RangeMax
+			0, //ScaleMin
+			100, //ScaleMax
+			"%", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,
+			"Illumination",
+			"IL",
+			18, //Bitoffs
+			17, //Bitsize
+			0, //RangeMin
+			100000, //RangeMax
+			0, //ScaleMin
+			100000, //ScaleMax
+			"lx", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			3,
+			"Acceleration Status",
+			"AS",
+			35, //Bitoffs
+			2, //Bitsize
+			0, //RangeMin
+			3, //RangeMax
+			0, //ScaleMin
+			3, //ScaleMax
+			"", //Unit
+			{{0, "Periodic Update"},{1, "Threshold 1 exceeded"}, {2, "Threshold 2 exceeded"}}, //Enum
+		},
+		{
+			1,
+			"Acceleration X",
+			"AX",
+			37, //Bitoffs
+			10, //Bitsize
+			0, //RangeMin
+			1000, //RangeMax
+			-2.5, //ScaleMin
+			2.5, //ScaleMax
+			"g", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,
+			"Acceleration Y",
+			"AY",
+			47, //Bitoffs
+			10, //Bitsize
+			0, //RangeMin
+			1000, //RangeMax
+			-2.5, //ScaleMin
+			2.5, //ScaleMax
+			"g", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,
+			"Acceleration Z",
+			"AZ",
+			57, //Bitoffs
+			10, //Bitsize
+			0, //RangeMin
+			1000, //RangeMax
+			-2.5, //ScaleMin
+			2.5, //ScaleMax
+			"g", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			3,
+			"Contact",
+			"CO",
+			67, //Bitoffs
+			1, //Bitsize
+			0, //RangeMin
+			1, //RangeMax
+			0, //ScaleMin
+			1, //ScaleMax
+			"", //Unit
+			{{0, "Open"}, {1, "Close"}}, //Enum
 		},
 		{
 			1,"","",0,0,0,0,0,0,"",{{0, NULL}},
@@ -903,6 +1015,10 @@ int InitEep(char *Profile)
 	SaveEep(&EepTable[count++], 5, "D2-32-02",
 		"A.C. Current Clamp",
 		&D2_32_02[0]);
+
+	SaveEep(&EepTable[count++], 9, "D2-14-41",
+		"Multi Function Sensors",
+		&D2_14_41[1]);
 
 	SaveEep(&EepTable[count], 0, "\0", "\0", NULL); //Add end if table mark
 

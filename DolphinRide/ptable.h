@@ -25,10 +25,10 @@ typedef struct _enumtable
 
 typedef enum _value_type
 {
-        NotUsed = 0,
-        Data = 1,
-        Flag = 2,
-        Enum = 3
+        VT_NotUsed = 0,
+        VT_Data = 1,
+        VT_Flag = 2,
+        VT_Enum = 3
 } VALUE_TYPE;
 
 typedef struct _datafield

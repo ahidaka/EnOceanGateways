@@ -25,6 +25,7 @@ enum _boolvalue { false = 0, true = 1};
 #define EO_FILTER_SIZE (256)
 
 #define BROKER_FILE "brokers.txt"
+#define PUBLICKEY_FILE "publickey.txt"
 #define MAX_BROKER (8)
 #define PID_FILE "dpride.pid"
 #define SIG_BROKERS (SIGRTMIN + 6)
@@ -45,6 +46,7 @@ typedef enum _eo_mode
 typedef struct _eo_control
 {
         EO_MODE Mode;
+        int AFlags;
         int CFlags;
         int VFlags;
         int Logger;
@@ -60,6 +62,8 @@ typedef struct _eo_control
 	char *CommandPath;
         char *BrokerFile;
         char *BrokerPath;
+        char *PublickeyFile;
+        char *PublickeyPath;
 	char *PidPath;
         char *EEPFile;
         char *LogFile;
@@ -111,14 +115,14 @@ typedef struct _node_table {
         char *Desc;
         int SCCount;
         char **SCuts;
-        //CM_TABLE *Model; // Pointer to ModelCache table
+        void *Secure; // Pointer to SecureTable
 } NODE_TABLE;
 
 //
 //
-#define Warn(msg)  fprintf(stderr, "#WARN %s: %s\n", __FUNCTION__, msg)
-#define Error(msg)  fprintf(stderr, "*ERR %s: %s\n", __FUNCTION__, msg)
-#define Error2(msg)  fprintf(stderr, "*ERR %s: %s=%s\n", __FUNCTION__, msg, arg)
+#define Warn(msg)  fprintf(stderr, "#WARN %s: %s\n", __FUNCTION__, (msg))
+#define Error(msg)  fprintf(stderr, "*ERR %s: %s\n", __FUNCTION__, (msg))
+#define Error2(msg, arg)  fprintf(stderr, "*ERR %s: %s=%s\n", __FUNCTION__, (msg), (arg))
 
 void CleanUp(int Signum);
 
@@ -141,6 +145,10 @@ void EoSetEep(EO_CONTROL *P, byte *Id, byte *Data, uint Rorg);
 //void PrintTelegram(EO_PACKET_TYPE packetType, byte *id, byte erp2hdr, byte *data);
 
 bool CheckTableId(uint Target);
+
+NODE_TABLE *GetTableId(uint Target);
+
+void ClearTableId(void);
 
 char *GetNewName(char *Target);
 
@@ -204,7 +212,7 @@ static inline uint ByteToId(byte Bytes[4])
         return((Bytes[0] << 24) |(Bytes[1] << 16) | (Bytes[2] << 8) | Bytes[3]);
 }
 
-static inline void IdToByte(char *p, unsigned int id)
+static inline void IdToString(unsigned int id, char *p)
 {
         const unsigned int mask = 0xF;
         const char chars[16] = {'0','1','2','3','4','5','6','7','8','9',
@@ -223,4 +231,3 @@ static inline void IdToByte(char *p, unsigned int id)
         }
 #undef mkchar
 }
-

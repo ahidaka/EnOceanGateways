@@ -10,7 +10,9 @@
 #include "utils.h"
 #include "models.h"
 
-#ifndef ENGINEERING_FACT
+//#define MODEL_DEBUG (1)
+
+#ifdef ENGINEERING_FACT
 #include "common-model.c"
 #else
 void CmPrintTI(BYTE *Buf, BYTE *Eepbuf, BYTE *Data, INT len) {}
@@ -207,6 +209,9 @@ CM_TABLE *CmGetModel(BYTE *Buf, INT Size)
 	char tempName[CM_STRSIZE];
         int i;
 
+#if MODEL_DEBUG
+	printf("##MD: Enter CmGetModel Size=%d CI=%d\n", Size, CacheIndex);
+#endif
         index = CmFpSearch(&ModelCache[0], Buf, Size);
         if (index < 0) {
                 // new fingerprint for new model
@@ -229,6 +234,9 @@ CM_TABLE *CmGetModel(BYTE *Buf, INT Size)
 			sprintf(tempName, "%s-%d", baseName, i);
 			ptmp = &ModelCache[0];
 			matched = FALSE;
+#if MODEL_DEBUG
+			printf("##MD: %d:old CmStr=%s\n", i, pmc->CmStr);
+#endif
 			while(ptmp != NULL && ptmp->CmStr != NULL) {
 				if (!strcmp(tempName, ptmp->CmStr)) {
 					// Is mached existing name?
@@ -240,12 +248,15 @@ CM_TABLE *CmGetModel(BYTE *Buf, INT Size)
 			if (!matched)
 				break;
 		}
+#if MODEL_DEBUG
+		printf("##MD: new CmStr=%s\n", pmc->CmStr);
+#endif
                 pmc->CmStr = strdup(tempName);
 		pmc->Title = CmMakeTitle(modelHandle);
                 pmc->Count = fpSize;
 		pmc->Dtable = CmMakeDataField(modelHandle);
 		////////
-#if 0
+#if MODEL_DEBUG
 		for(i = 0; i < fpSize; i++) {
 			printf("**CmGetModel: %d:%d %s=%s\n", i, (pmc->Dtable+i)->ValueType,
 			       (pmc->Dtable+i)->ShortCut, (pmc->Dtable+i)->DataName);

@@ -10,9 +10,9 @@ int main(int argc, char *argv[])
 
         int opt;
         char *eep = NULL;
-        char *profile = "eep2.6.5.xml";
+        char *profile = "eep.xml";
 
-        while ((opt = getopt(argc, argv, "ade:")) != EOF) {
+        while ((opt = getopt(argc, argv, "ade:f:")) != EOF) {
                 switch (opt) {
                 case 'a':
                         printall++;
@@ -23,8 +23,11 @@ int main(int argc, char *argv[])
                 case 'e':
                         eep = optarg;
                         break;
+                case 'f':
+                        profile = optarg;
+                        break;
                 default: /* '?' */
-                        fprintf(stderr, "Usage: %s: [-a][-d][-e eep]\n", argv[0]);
+                        fprintf(stderr, "Usage: %s: [-a][-d][-e eep][-f eepfile]\n", argv[0]);
                         exit(EXIT_FAILURE);
                         break;
                 }

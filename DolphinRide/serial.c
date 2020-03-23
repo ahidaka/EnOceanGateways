@@ -25,6 +25,7 @@ VOID PacketDump(BYTE *p)
 	int i;
 	int length = p[0] << 8 | p[1];
 	int realLength = length;
+	int optLength = p[2];
 
 	if (_GetPacketDebug > 0) {
 		if (length < 8)
@@ -33,11 +34,17 @@ VOID PacketDump(BYTE *p)
 			length = 32;
 		length -= 8;
 	
-		printf("[%02X%02X%02X%02X:%d] %02X %02X %02X %02X %02X %02X %02X %02X  ",
+		printf("[%02X%02X%02X%02X:%d] %02X %02X %02X %02X %02X %02X %02X %02X ",
 		       p[realLength], p[realLength + 1], p[realLength + 2], p[realLength + 3], realLength, 
 		       p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
 		p += 8;
 		for(i = 0; i < length; i++) {
+			printf("%02X ", *p++);
+			if (i % 8 == 7)
+				printf(" ");
+		}
+		printf("|");
+		for(i = 0; i < optLength; i++) {
 			printf("%02X ", *p++);
 			if (i % 8 == 7)
 				printf(" ");

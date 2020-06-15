@@ -5,14 +5,14 @@
 #include <string.h>
 #include <fcntl.h>
 
-#include "typedefs.h"
-#include "ptable.h"
-#include "utils.h"
+#include "../dpride/typedefs.h"
+#include "../dpride/ptable.h"
+#include "../dpride/utils.h"
 #include "models.h"
 
 //#define MODEL_DEBUG (1)
 
-#ifdef ENGINEERING_FACT
+#ifndef ENGINEERING_FACT
 #include "common-model.c"
 #else
 void CmPrintTI(BYTE *Buf, BYTE *Eepbuf, BYTE *Data, INT len) {}

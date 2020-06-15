@@ -9,7 +9,7 @@
 #include "utils.h"
 #include "dpride.h"
 #include "ptable.h"
-#include "models.h"
+#include "../eolib/models.h"
 
 //#define EDX_DEBUG (1)
 //#define CMD_DEBUG (1)

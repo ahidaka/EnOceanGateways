@@ -174,7 +174,7 @@ int HexTrim(char *dst, char *src)
 }
 
 
-void SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DATAFIELD *Pd)
+int SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DATAFIELD *Pd)
 {
 	int tableSize;
 	DATAFIELD *table = NULL;
@@ -184,6 +184,20 @@ void SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DAT
 
 	_D printf("SaveEep: %d <%s><%s><%s>\n",
 		  FieldCount, EepString, Title, Pd ? Pd->DataName : "");
+
+	if (EepString == NULL || EepString[0] == '\0' || strlen(EepString) < 8) {
+		//Warn("NULL or short EEPString");
+		return 0;
+	}
+	if (!strcmp("D0-00-00", EepString)) {
+		// something troubled at SmartACK MailBox
+		return 0;
+	}
+	
+	if (GetEep(EepString) != NULL) {
+		//Warn("alredy exists at saved EEP table");
+		return 0;
+	}
 
 	Table->Size = FieldCount;
 	strcpy(Table->Eep, EepString);
@@ -248,6 +262,8 @@ void SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DAT
 		pt++, Pd++;
 	}
 	Table->Dtable = table;
+
+	return(FieldCount);
 }
 
 //
@@ -456,7 +472,7 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
 			     || !strncmp(eepString, "A5", 2) // 4BS
 			     || !strncmp(eepString, "D2", 2) // VLD
 				    )) {
-				SaveEep(Table, fieldCount, eepString, FuncTitle, &dataTable[0]);
+			    (void) SaveEep(Table, fieldCount, eepString, FuncTitle, &dataTable[0]);
 		    }
 		    else {
 			    fieldCount = 0;
@@ -660,9 +676,247 @@ EEP_TABLE *GetEep(char *EEP)
 
 int InitEep(char *Profile)
 {
-	xmlTextReaderPtr reader;
+	xmlTextReaderPtr reader = NULL;
 	int ret, count;
 	int numField;
+
+	static DATAFIELD A5_02_05[2] =
+	{
+		{
+			1,
+			"Temperature",
+			"TMP",
+			16, //Bitoffs
+			8, //Bitsize
+			255, //RangeMin
+			0, //RangeMax
+			0, //ScaleMin
+			40, //ScaleMax
+			"℃", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,"","",0,0,0,0,0,0,"",{{0, NULL}},
+		}
+	};
+
+	static DATAFIELD A5_04_01[4] =
+	{
+		{
+			1,
+			"Humidity",
+			"HUM",
+			8, //Bitoffs
+			8, //Bitsize
+			0, //RangeMin
+			250, //RangeMax
+			0, //ScaleMin
+			100, //ScaleMax
+			"%", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,
+			"Temperature",
+			"TMP",
+			16, //Bitoffs
+			8, //Bitsize
+			0, //RangeMin
+			250, //RangeMax
+			0, //ScaleMin
+			40, //ScaleMax
+			"℃", //Unit
+			{{0, NULL}}, //Enum			
+	    },
+		{
+			3,
+			"T-Sensor",
+			"TSN",
+			30, //Bitoffs
+			1, //Bitsize
+			0, //RangeMin
+			1, //RangeMax
+			0, //ScaleMin
+			1, //ScaleMax
+			"", //
+			{{0, "not available"},{1, "available"}}, //Enum
+	    },
+		{
+			1,"","",0,0,0,0,0,0,"",{{0, NULL}},
+		}
+	};
+	
+	static DATAFIELD A5_04_03[4] =
+	{
+		{
+			1,
+			"Humidity",
+			"HUM",
+			0, //Bitoffs
+			8, //Bitsize
+			0, //RangeMin
+			255, //RangeMax
+			0, //ScaleMin
+			100, //ScaleMax
+			"%", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,
+			"Temperature",
+			"TMP",
+			14, //Bitoffs
+			10, //Bitsize
+			0, //RangeMin
+			1023, //RangeMax
+			-20, //ScaleMin
+			60, //ScaleMax
+			"℃", //Unit
+			{{0, NULL}}, //Enum
+	    },
+		{
+			3,
+			"Telegram Type",
+			"TTP",
+			31, //Bitoffs
+			1, //Bitsize
+			0, //RangeMin
+			1, //RangeMax
+			0, //ScaleMin
+			1, //ScaleMax
+			"", //
+			{{0, "Heartbeat"},{1, "Event triggered"}}, //Enum
+	    },
+		{
+			1,"","",0,0,0,0,0,0,"",{{0, NULL}},
+		}
+	};
+	
+	static DATAFIELD A5_06_02[5] =
+	{
+		{
+			1,
+			"Supply voltage",
+			"SVC",
+			0, //Bitoffs
+			8, //Bitsize
+			0, //RangeMin
+			255, //RangeMax
+			0, //ScaleMin
+			5.1, //ScaleMax
+			"V", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,
+			"Illumination 2",
+			"ILL2",
+			8, //Bitoffs
+			8, //Bitsize
+			0, //RangeMin
+			255, //RangeMax
+			0, //ScaleMin
+			510, //ScaleMax
+			"lx", //Unit
+			{{0, NULL}}, //Enum
+	    },
+		{
+			1,
+			"Illumination 1",
+			"ILL1",
+			16, //Bitoffs
+			8, //Bitsize
+			0, //RangeMin
+			255, //RangeMax
+			0, //ScaleMin
+			1020, //ScaleMax
+			"lx", //Unit
+			{{0, NULL}}, //Enum
+	    },
+		{
+			3,
+			"Range select",
+			"RS",
+			31, //Bitoffs
+			1, //Bitsize
+			0, //RangeMin
+			1, //RangeMax
+			0, //ScaleMin
+			1, //ScaleMax
+			"", //
+			{{0, "Range acc. to DB_1 (ILL1)"},{1, "Range acc. to DB_2 (ILL2)"}}, //Enum
+	    },
+		{
+			1,"","",0,0,0,0,0,0,"",{{0, NULL}},
+		}
+	};
+	
+	static DATAFIELD A5_06_03[3] =
+	{
+		{
+			1,
+			"Supply voltage",
+			"SVC",
+			0, //Bitoffs
+			8, //Bitsize
+			0, //RangeMin
+			255, //RangeMax
+			0, //ScaleMin
+			5.0, //ScaleMax
+			"V", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,
+			"Illumination",
+			"ILL",
+			8, //Bitoffs
+			10, //Bitsize
+			0, //RangeMin
+			1000, //RangeMax
+			0, //ScaleMin
+			510, //ScaleMax
+			"lx", //Unit
+			{{0, NULL}}, //Enum
+	    },
+		{
+			1,"","",0,0,0,0,0,0,"",{{0, NULL}},
+		}
+	};
+	
+	static DATAFIELD A5_14_05[3] =
+	{
+		{
+			1,
+			"Supply voltage",
+			"SVC",
+			0, //Bitoffs
+			8, //Bitsize
+			0, //RangeMin
+			255, //RangeMax
+			0, //ScaleMin
+			5.0, //ScaleMax
+			"V", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			3,
+			"Vibration",
+			"VIB",
+			30, //Bitoffs
+			1, //Bitsize
+			0, //RangeMin
+			1, //RangeMax
+			0, //ScaleMin
+			1, //ScaleMax
+			"", //
+			{{0, "No vibration detected"},{1, "Vibration detected"}}, //Enum
+	    },
+		{
+			1,"","",0,0,0,0,0,0,"",{{0, NULL}},
+		}
+	};
+	
 	static DATAFIELD D2_03_20_ES =
 	{
 		3,
@@ -677,6 +931,215 @@ int InitEep(char *Profile)
 		"", //Unit
 		{{0, NULL}}, //Enum
 	}; 
+
+	static DATAFIELD D2_14_40[9] =
+	{
+		{
+			1,
+			"Temperature 10",
+			"TP",
+			0, //Bitoffs
+			10, //Bitsize
+			0, //RangeMin
+			1000, //RangeMax
+			-40, //ScaleMin
+			60, //ScaleMax
+			"℃", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,
+			"Humidity",
+			"HU",
+			10, //Bitoffs
+			8, //Bitsize
+			0, //RangeMin
+			200, //RangeMax
+			0, //ScaleMin
+			100, //ScaleMax
+			"%", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,
+			"Illumination",
+			"IL",
+			18, //Bitoffs
+			17, //Bitsize
+			0, //RangeMin
+			100000, //RangeMax
+			0, //ScaleMin
+			100000, //ScaleMax
+			"lx", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			3,
+			"Acceleration Status",
+			"AS",
+			35, //Bitoffs
+			2, //Bitsize
+			0, //RangeMin
+			3, //RangeMax
+			0, //ScaleMin
+			3, //ScaleMax
+			"", //Unit
+			{{0, "Periodic Update"},{1, "Threshold 1 exceeded"}, {2, "Threshold 2 exceeded"}}, //Enum
+		},
+		{
+			1,
+			"Acceleration X",
+			"AX",
+			37, //Bitoffs
+			10, //Bitsize
+			0, //RangeMin
+			1000, //RangeMax
+			-2.5, //ScaleMin
+			2.5, //ScaleMax
+			"g", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,
+			"Acceleration Y",
+			"AY",
+			47, //Bitoffs
+			10, //Bitsize
+			0, //RangeMin
+			1000, //RangeMax
+			-2.5, //ScaleMin
+			2.5, //ScaleMax
+			"g", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,
+			"Acceleration Z",
+			"AZ",
+			57, //Bitoffs
+			10, //Bitsize
+			0, //RangeMin
+			1000, //RangeMax
+			-2.5, //ScaleMin
+			2.5, //ScaleMax
+			"g", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,"","",0,0,0,0,0,0,"",{{0, NULL}},
+		}
+	};						
+
+	static DATAFIELD D2_14_41[10] =
+	{
+		{
+			1,
+			"Temperature 10",
+			"TP",
+			0, //Bitoffs
+			10, //Bitsize
+			0, //RangeMin
+			1000, //RangeMax
+			-40, //ScaleMin
+			60, //ScaleMax
+			"℃", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,
+			"Humidity",
+			"HU",
+			10, //Bitoffs
+			8, //Bitsize
+			0, //RangeMin
+			200, //RangeMax
+			0, //ScaleMin
+			100, //ScaleMax
+			"%", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,
+			"Illumination",
+			"IL",
+			18, //Bitoffs
+			17, //Bitsize
+			0, //RangeMin
+			100000, //RangeMax
+			0, //ScaleMin
+			100000, //ScaleMax
+			"lx", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			3,
+			"Acceleration Status",
+			"AS",
+			35, //Bitoffs
+			2, //Bitsize
+			0, //RangeMin
+			3, //RangeMax
+			0, //ScaleMin
+			3, //ScaleMax
+			"", //Unit
+			{{0, "Periodic Update"},{1, "Threshold 1 exceeded"}, {2, "Threshold 2 exceeded"}}, //Enum
+		},
+		{
+			1,
+			"Acceleration X",
+			"AX",
+			37, //Bitoffs
+			10, //Bitsize
+			0, //RangeMin
+			1000, //RangeMax
+			-2.5, //ScaleMin
+			2.5, //ScaleMax
+			"g", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,
+			"Acceleration Y",
+			"AY",
+			47, //Bitoffs
+			10, //Bitsize
+			0, //RangeMin
+			1000, //RangeMax
+			-2.5, //ScaleMin
+			2.5, //ScaleMax
+			"g", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			1,
+			"Acceleration Z",
+			"AZ",
+			57, //Bitoffs
+			10, //Bitsize
+			0, //RangeMin
+			1000, //RangeMax
+			-2.5, //ScaleMin
+			2.5, //ScaleMax
+			"g", //Unit
+			{{0, NULL}}, //Enum
+		},
+		{
+			3,
+			"Contact",
+			"CO",
+			67, //Bitoffs
+			1, //Bitsize
+			0, //RangeMin
+			1, //RangeMax
+			0, //ScaleMin
+			1, //ScaleMax
+			"", //Unit
+			{{0, "Open"}, {1, "Close"}}, //Enum
+		},
+		{
+			1,"","",0,0,0,0,0,0,"",{{0, NULL}},
+		}
+	};						
 
 	static DATAFIELD D2_32_00[4] =
 	{
@@ -855,117 +1318,26 @@ int InitEep(char *Profile)
 		}
 	};						
 
-	static DATAFIELD D2_14_41[10] =
+	static DATAFIELD D5_00_01_CO =
 	{
-		{
-			1,
-			"Temperature 10",
-			"TP",
-			0, //Bitoffs
-			10, //Bitsize
-			0, //RangeMin
-			1000, //RangeMax
-			-40, //ScaleMin
-			60, //ScaleMax
-			"℃", //Unit
-			{{0, NULL}}, //Enum
-		},
-		{
-			1,
-			"Humidity",
-			"HU",
-			10, //Bitoffs
-			8, //Bitsize
-			0, //RangeMin
-			200, //RangeMax
-			0, //ScaleMin
-			100, //ScaleMax
-			"%", //Unit
-			{{0, NULL}}, //Enum
-		},
-		{
-			1,
-			"Illumination",
-			"IL",
-			18, //Bitoffs
-			17, //Bitsize
-			0, //RangeMin
-			100000, //RangeMax
-			0, //ScaleMin
-			100000, //ScaleMax
-			"lx", //Unit
-			{{0, NULL}}, //Enum
-		},
-		{
-			3,
-			"Acceleration Status",
-			"AS",
-			35, //Bitoffs
-			2, //Bitsize
-			0, //RangeMin
-			3, //RangeMax
-			0, //ScaleMin
-			3, //ScaleMax
-			"", //Unit
-			{{0, "Periodic Update"},{1, "Threshold 1 exceeded"}, {2, "Threshold 2 exceeded"}}, //Enum
-		},
-		{
-			1,
-			"Acceleration X",
-			"AX",
-			37, //Bitoffs
-			10, //Bitsize
-			0, //RangeMin
-			1000, //RangeMax
-			-2.5, //ScaleMin
-			2.5, //ScaleMax
-			"g", //Unit
-			{{0, NULL}}, //Enum
-		},
-		{
-			1,
-			"Acceleration Y",
-			"AY",
-			47, //Bitoffs
-			10, //Bitsize
-			0, //RangeMin
-			1000, //RangeMax
-			-2.5, //ScaleMin
-			2.5, //ScaleMax
-			"g", //Unit
-			{{0, NULL}}, //Enum
-		},
-		{
-			1,
-			"Acceleration Z",
-			"AZ",
-			57, //Bitoffs
-			10, //Bitsize
-			0, //RangeMin
-			1000, //RangeMax
-			-2.5, //ScaleMin
-			2.5, //ScaleMax
-			"g", //Unit
-			{{0, NULL}}, //Enum
-		},
-		{
-			3,
-			"Contact",
-			"CO",
-			67, //Bitoffs
-			1, //Bitsize
-			0, //RangeMin
-			1, //RangeMax
-			0, //ScaleMin
-			1, //ScaleMax
-			"", //Unit
-			{{0, "Open"}, {1, "Close"}}, //Enum
-		},
-		{
-			1,"","",0,0,0,0,0,0,"",{{0, NULL}},
-		}
-	};						
+		3,
+		"Contact",
+		"CO",
+		7, //Bitoffs
+		1, //Bitsize
+		0, //RangeMin
+		1, //RangeMax
+		0, //ScaleMin
+		1, //ScaleMax
+		"", //Unit
+		{{0, "open"},{1, "closed"}}, //Enum
+	}; 
 
+	stateEep = 0;
+	stateProfile = 0;
+	stateRorg = 0;
+	stateFunc = 0;
+	count = 0;
 	EepTable = malloc(sizeof(EEP_TABLE) * EEP_SIZE);
 	if (!EepTable) {
 		fprintf(stderr, "cannot malloc EepTable\n");
@@ -980,50 +1352,130 @@ int InitEep(char *Profile)
 	reader = xmlNewTextReaderFilename(Profile);
 	if ( !reader ) {
 		fprintf(stderr, "Failed to open XML file=%s.\n", Profile);
-		return 0;
 	}
+	else {
+		_D printf("<<start eep>>\n"); 
+		
+		while((ret = xmlTextReaderRead(reader)) > 0) {
+			numField = ProcessNode(reader, &EepTable[count]);
+			//if (numField > 0) {
+			//if (EepTable[count].Eep[0] != '\0' && EepTable[i].Dtable != NULL && numField > 0) {
+			if (EepTable[count].Eep[0] != '\0') {
+				_DD printf("<<count:%d %d %s>>\n", count, numField, EepTable[count].Eep);
+				count++;
+			}
+		}
+		_D printf("<<end count=%d>>\n", count);
+	}
+#if 0 // DEBUG
+	do {
+		int i;
 
-	_D printf("<<start>>\n"); 
-	
-	stateEep = 0;
-	stateProfile = 0;
-	stateRorg = 0;
-	stateFunc = 0;
-
-	count = 0;
-	while((ret = xmlTextReaderRead(reader)) > 0) {
-		numField = ProcessNode(reader, &EepTable[count]);
-		if (numField > 0) {
-			_DD printf("<<count:%d %d>>\n", count, numField);
-			count++;
+		for(i = 0; i < count; i++) {
+			printf("%d: EEP=%s,%s t=%p\n",
+			       i, EepTable[i].Eep, EepTable[i].Title, EepTable[i].Dtable);
 		}
 	}
+	while(0);
+#endif
+
+	_D printf("AddEEP count=%d\n", count);
+	if (SaveEep(&EepTable[count], 1, "A5-02-05",
+		    "Temperature Sensor Range 0°C to +40°C",
+		    &A5_02_05[0]) > 0) {
+		count++;
+	}
+
+	_D printf("AddEEP count=%d\n", count);
+	if (SaveEep(&EepTable[count], 3, "A5-04-01",
+		    "Temperature and Humidity Sensor",
+		    &A5_04_01[0]) > 0) {
+		count++;
+	}
     
-	_D printf("<<end count=%d>>\n", count);
-	SaveEep(&EepTable[count++], 1, "D2-03-20",
-		"Beacon with Vibration Detection",
-		&D2_03_20_ES); //Add Custom "D2-03-20",
+	_D printf("AddEEP count=%d\n", count);
+	if (SaveEep(&EepTable[count], 3, "A5-04-03",
+		    "Temperature and Humidity Sensor",
+		    &A5_04_03[0]) > 0) {
+		count++;
+	}
+    
+	_D printf("AddEEP count=%d\n", count);
+	if (SaveEep(&EepTable[count], 4, "A5-06-02",
+		    "Light Sensor",
+		    &A5_06_02[0]) > 0) {
+		count++;
+	}
+   
+	_D printf("AddEEP count=%d\n", count);
+	if (SaveEep(&EepTable[count], 2, "A5-06-03",
+		    "Light Sensor",
+		    &A5_06_03[0]) > 0) {
+		count++;
+	}
+   
+	_D printf("AddEEP count=%d\n", count);
+	if (SaveEep(&EepTable[count], 2, "A5-14-05",
+		    "Vibration/Tilt, Supply voltage monitor",
+		    &A5_14_05[0]) > 0) {
+		count++;
+	}
+	
+	_D printf("AddEEP count=%d\n", count);
+	if (SaveEep(&EepTable[count], 1, "D2-03-20",
+		    "Beacon with Vibration Detection",
+		    &D2_03_20_ES) > 0) { //Add Custom "D2-03-20",
+		count++;
+	}
 
-	SaveEep(&EepTable[count++], 3, "D2-32-00",
-		"A.C. Current Clamp",
-		&D2_32_00[0]);
+	_D printf("AddEEP count=%d\n", count);
+	if (SaveEep(&EepTable[count], 8, "D2-14-40",
+		    "Multi Function Sensors",
+		    &D2_14_40[0]) > 0) {
+		count++;
+	}
+	
+	_D printf("AddEEP count=%d\n", count);
+	if (SaveEep(&EepTable[count], 9, "D2-14-41",
+		    "Multi Function Sensors",
+		    &D2_14_41[0]) > 0) {
+		count++;
+	}
 
-	SaveEep(&EepTable[count++], 4, "D2-32-01",
-		"A.C. Current Clamp",
-		&D2_32_01[0]);
+	_D printf("AddEEP count=%d\n", count);
+	if (SaveEep(&EepTable[count], 3, "D2-32-00",
+		    "A.C. Current Clamp",
+		    &D2_32_00[0]) > 0) {
+		count++;
+	}
 
-	SaveEep(&EepTable[count++], 5, "D2-32-02",
-		"A.C. Current Clamp",
-		&D2_32_02[0]);
+	_D printf("AddEEP count=%d\n", count);
+	if (SaveEep(&EepTable[count], 4, "D2-32-01",
+		    "A.C. Current Clamp",
+		    &D2_32_01[0]) > 0) {
+		count++;
+	}
 
-	SaveEep(&EepTable[count++], 9, "D2-14-41",
-		"Multi Function Sensors",
-		&D2_14_41[1]);
+	_D printf("AddEEP count=%d\n", count);
+	if (SaveEep(&EepTable[count], 5, "D2-32-02",
+		    "A.C. Current Clamp",
+		    &D2_32_02[0]) > 0) {
+		count++;
+	}
 
+	_D printf("AddEEP count=%d\n", count);
+	if (SaveEep(&EepTable[count], 1, "D5-00-01",
+		    "Single Input Contact",
+		    &D5_00_01_CO) > 0) {
+		count++;
+	}
+
+	_D printf("AddEEP LAST count=%d\n", count);
 	SaveEep(&EepTable[count], 0, "\0", "\0", NULL); //Add end if table mark
 
-	xmlFreeTextReader(reader);
-
+	if (reader != NULL) {
+		xmlFreeTextReader(reader);
+	}
 	if (ret == -1) {
 		fprintf(stderr, "Parse error.\n");
 		return 0;

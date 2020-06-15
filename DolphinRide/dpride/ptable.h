@@ -96,4 +96,4 @@ int InitEep(char *Profile);
 EEP_TABLE *GetEep(char *EEP);
 void PrintEepAll();
 void PrintEep(char *EEP);
-void SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DATAFIELD *Pd);
+int SaveEep(EEP_TABLE *Table, int FieldCount, char *EepString, char *Title, DATAFIELD *Pd);

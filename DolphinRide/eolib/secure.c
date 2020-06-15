@@ -9,8 +9,8 @@
 #include <fcntl.h>
 #include <string.h>
 #include <ctype.h>
-#include "typedefs.h"
-#include "dpride.h"
+#include "../dpride/typedefs.h"
+#include "../dpride/dpride.h"
 #include "secure.h"
 
 #define SECURE_DEBUG 1
@@ -175,8 +175,8 @@ static SCAN_STATUS ScanLine(CHAR *Buffer, PUBLICKEY *pt)
 				ToHexDecimal(target, pt->Key);
 				status = GotKey;
 #ifdef SECURE_DEBUG
-				printf("status=%d char=%02X length=%d\n",
-				       status, p ? *p : -1, p - &Buffer[0]);
+				printf("status=%d char=%02X length=%ld\n",
+				       status, p ? *p : -1, (long) (p - &Buffer[0]));
 #endif
 				i = 0;
 				break;
@@ -336,7 +336,7 @@ static VOID WriteLine(FILE *f, PUBLICKEY *pt)
 	
 	DEBUG_LOG("Enter");
 #ifdef SECURE_DEBUG
-	printf("ID:%08lX RLC=%02X %02X %02X %02X KEY=%02X %02X %02X %02X\n",
+	printf("ID:%08X RLC=%02X %02X %02X %02X KEY=%02X %02X %02X %02X\n",
 	       pt->Id, pt->Rlc[0], pt->Rlc[1], pt->Rlc[2], pt->Rlc[3],
 	       pt->Key[0], pt->Key[1], pt->Key[2], pt->Key[3]);
 #endif
@@ -384,7 +384,7 @@ VOID RewritePublickey(EO_CONTROL *p)
 	}
 }
 
-PUBLICKEY *AddPublickey(EO_CONTROL *p, ULONG Id, BYTE *Rlc, BYTE *Key)
+PUBLICKEY *AddPublickey(EO_CONTROL *p, UINT Id, BYTE *Rlc, BYTE *Key)
 {
 	INT i;
 	PUBLICKEY *pt = NULL;
@@ -443,7 +443,7 @@ PUBLICKEY *AddPublickey(EO_CONTROL *p, ULONG Id, BYTE *Rlc, BYTE *Key)
 	return pt;
 }
 
-PUBLICKEY *GetPublickey(ULONG Id)
+PUBLICKEY *GetPublickey(UINT Id)
 {
 	INT i;
 	PUBLICKEY *pt;
@@ -458,7 +458,7 @@ PUBLICKEY *GetPublickey(ULONG Id)
 	return NULL;
 }
 
-PUBLICKEY *UpdateRlc(ULONG Id,  BYTE *Rlc)
+PUBLICKEY *UpdateRlc(UINT Id,  BYTE *Rlc)
 {
 	PUBLICKEY *pt = GetPublickey(Id);
 
@@ -473,7 +473,7 @@ PUBLICKEY *UpdateRlc(ULONG Id,  BYTE *Rlc)
 	return pt;
 }
 
-PUBLICKEY *ClearPublickey(ULONG Id)
+PUBLICKEY *ClearPublickey(UINT Id)
 {
 	PUBLICKEY *pk = GetPublickey(Id);
 
@@ -498,10 +498,11 @@ void SecFree(SEC_HANDLE h) {}
 INT SecUpdate(SEC_HANDLE h) {return 0;}
 INT SecCheck(SEC_HANDLE h, BYTE *Rlc) {return 0;}
 INT SecInspect(SEC_HANDLE h, BYTE *Packet) {return 0;}
-INT SecGetRlc(SEC_HANDLE h, BYTE *Rlc) {return 0;}
 
 INT SecEncrypt(SEC_HANDLE h, BYTE *Data, INT Length, BYTE *Cypher) {return 0;}
 INT SecDecrypt(SEC_HANDLE h, BYTE *Packet, INT Length, BYTE *Data) {return 0;}
+
+INT SecGetRlc(SEC_HANDLE h, BYTE *Rlc)  {return 0;}
 #endif
 
 #ifdef NEED_MAIN
@@ -517,7 +518,7 @@ int main(int ac, char **av)
 
 	s = ScanLine(av[1], pt);
 
-	printf("id=%08lX rlc=%02X%02X%02X%02X key=%02X%02X%02X%02X\n", pt->Id,
+	printf("id=%08X rlc=%02X%02X%02X%02X key=%02X%02X%02X%02X\n", pt->Id,
 	       pt->Rlc[0], pt->Rlc[1], pt->Rlc[2], pt->Rlc[3],
 	       pt->Key[0], pt->Key[1], pt->Key[2], pt->Key[3]);
 

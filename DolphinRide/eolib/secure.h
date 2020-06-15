@@ -3,11 +3,16 @@
 //
 #pragma once
 
-#include "typedefs.h"
+#include "../dpride/typedefs.h"
+
+//#include "eoif.h"
 
 #define KEY_SIZE (128/8) //16
 #define RLC_SIZE (4)
 #define CMAC_SIZE (4)
+
+//int eo_encrypt(uint8_t *key, uint8_t *in, uint8_t *out);
+//int eo_decrypt(uint8_t *key, uint8_t *in, uint8_t *out);
 
 typedef enum {
 	NO_ENTRY = 0,
@@ -34,7 +39,7 @@ INT SecDecrypt(SEC_HANDLE h, BYTE *Packet, INT Length, BYTE *Data);
 // Publickey supporting stuff
 //
 typedef struct _pulickey {
-	ULONG Id;
+	UINT Id;
 	BYTE Rlc[RLC_SIZE];
 	BYTE Key[KEY_SIZE];
 	CHAR *RlcPath;
@@ -45,7 +50,7 @@ typedef struct _pulickey {
 // Security supporting stuff
 //
 typedef struct _secure_register {
-	ULONG Id;
+	UINT Id;
 	PACKET_ENTRY Status;
 	INT Info;
 	INT Slf;
@@ -70,7 +75,7 @@ VOID WriteRlc(PUBLICKEY *pt);
 VOID ReloadPublickey(EO_CONTROL *p);
 VOID DeletePublickey(EO_CONTROL *p);
 
-PUBLICKEY *AddPublickey(EO_CONTROL *p, ULONG Id, BYTE *Rlc, BYTE *Key);
-PUBLICKEY *GetPublickey(ULONG Id);
-PUBLICKEY *UpdateRlc(ULONG Id, BYTE *Rlc);
-PUBLICKEY *ClearPublickey(ULONG Id);
+PUBLICKEY *AddPublickey(EO_CONTROL *p, UINT Id, BYTE *Rlc, BYTE *Key);
+PUBLICKEY *GetPublickey(UINT Id);
+PUBLICKEY *UpdateRlc(UINT Id, BYTE *Rlc);
+PUBLICKEY *ClearPublickey(UINT Id);

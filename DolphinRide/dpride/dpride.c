@@ -19,15 +19,15 @@
 #include "queue.h"
 #include "serial.h"
 #include "esp3.h"
-#include "models.h"
-#include "secure.h"
 #include "logger.h"
 #include "utils.h"
+#include "../eolib/models.h"
+#include "../eolib/secure.h"
 
 static const char copyright[] = "\n(c) 2017 Device Drivers, Ltd. \n";
-static const char version[] = "\n@ dpride Version 1.25 \n";
+static const char version[] = "\n@ dpride Version 1.23 \n";
 
-#define SECURE_DEBUG (1)
+//#define SECURE_DEBUG (1)
 //#define FILTER_DEBUG (1)
 //#define CMD_DEBUG (1)
 //#define CT_DEBUG (1)
@@ -1505,7 +1505,7 @@ void NotifyBrokers(long num)
 	}
 }
 
-//
+#ifdef SECURE_DEBUG
 static void PrintKey(BYTE *Key, BYTE *Rlc)
 {
 	int i;
@@ -1517,6 +1517,7 @@ static void PrintKey(BYTE *Key, BYTE *Rlc)
 		printf("%02X ", Rlc[i]);
 	printf("\n");
 }
+#endif
 
 void PushPacket(BYTE *Buffer)
 {
@@ -1526,7 +1527,7 @@ void PushPacket(BYTE *Buffer)
 	INT optionLength;
 	INT length;
 	INT thisDataLength;
-	INT i, seq;
+	INT seq;
 	INT index;
 	INT secureMark;
 	BYTE rOrg;
@@ -1571,12 +1572,20 @@ void PushPacket(BYTE *Buffer)
 
 		memcpy(&pb->Buffer[HEADER_SIZE], data, thisDataLength + rOrgByte);
 	}
-	else if (*(ULONG *) &pb->Id[0] == *(ULONG *) &Buffer[length]) {
-		memcpy(&pb->Buffer[HEADER_SIZE + pb->CurrentLength + (rOrgByte & !secureMark)], data, thisDataLength);
-	}
 	else {
-		Error("Registered ID mismatched");
-		return;
+		if (p->Debug > 1) {
+			printf("pb->Id:%02X%02X%02X%02X *(UINT*)&pb->Id[]:%08X *(UINT*)&Buffer[]:%08X\n",
+			       pb->Id[0], pb->Id[1], pb->Id[2], pb->Id[3],
+			       *(UINT *) &pb->Id[0], *(UINT *) &Buffer[length]);
+		}
+
+		if (*(UINT *) &pb->Id[0] == *(UINT *) &Buffer[length]) {
+			memcpy(&pb->Buffer[HEADER_SIZE + pb->CurrentLength + (rOrgByte & !secureMark)], data, thisDataLength);
+		}
+		else {
+			Error("Registered ID mismatched");
+			return;
+		}
 	}
 
 	if (p->Debug > 0) {
@@ -1607,10 +1616,12 @@ void PushPacket(BYTE *Buffer)
 			SECURE_REGISTER *ps;
 			ULONG secId = ByteToId(&pb->Id[0]);
 			SEC_HANDLE sec;
-			INT decLength;
 			NODE_TABLE *nt;
-			BYTE nextRlc[4];
+			INT status;
+			INT decLength;
 #ifdef SECURE_DEBUG
+			INT i;
+			BYTE nextRlc[4];
 			printf("+P"); PacketDump(&pb->Buffer[0]);
 #endif			
 			memcpy(&pb->EncBuffer[0], &pb->Buffer[0], HEADER_SIZE + pb->Length + optionLength); 
@@ -1624,7 +1635,6 @@ void PushPacket(BYTE *Buffer)
 			if (ps == NULL) {
 				// not SecureRegistered, use NODE_TABLE
 				PUBLICKEY *pt;
-				INT status;
 				BYTE rlc[RLC_SIZE];
 				
 				nt = GetTableId(secId);
@@ -1636,15 +1646,22 @@ void PushPacket(BYTE *Buffer)
 					pt = GetPublickey(secId);
 					ReadRlc(pt);
 					status = SecCheck(sec, pt->Rlc);
-#ifdef SECURE_DEBUG
-					printf("SecCheck=%d, old=%02X%02X%02X%02X new=%02X%02X%02X%02X\n",
-					       status, rlc[0], rlc[1], rlc[2], rlc[3],
-					       pt->Rlc[0], pt->Rlc[1], pt->Rlc[2], pt->Rlc[3]);
-#endif
+
+					if (p->Debug > 1) {
+						//#ifdef SECURE_DEBUG
+						printf("SecCheck=%d, old=%02X%02X%02X%02X new=%02X%02X%02X%02X\n",
+						       status, rlc[0], rlc[1], rlc[2], rlc[3],
+						       pt->Rlc[0], pt->Rlc[1], pt->Rlc[2], pt->Rlc[3]);
+					}
 				}
 				else {
 					Error("Secure NULL");
-					fprintf(stderr, "EEP=%s Secure=%p\n", nt->Eep, nt->Secure);
+					if (nt != NULL) {
+						fprintf(stderr, "EEP=%s Secure=%p\n", nt->Eep, nt->Secure);
+					}
+					else {
+						fprintf(stderr, "Secure GetTableId is NULL\n");
+					}
 					return;
 				}
 			}
@@ -1678,8 +1695,11 @@ void PushPacket(BYTE *Buffer)
 				printf(" %02X", pb->EncBuffer[i]);
 			}
 			printf("\n");
-			printf("SEC: declength=%d, pb->Length=%d\n", decLength, pb->Length);
 #endif
+			if (p->Debug > 1) {
+				//#ifdef SECURE_DEBUG
+				printf("SEC: declength=%d, pb->Length=%d\n", decLength, pb->Length);
+			}
 			// Currently we don't care RLC and CMAC
 			SecUpdate(sec);
 #ifdef SECURE_DEBUG

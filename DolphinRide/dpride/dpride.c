@@ -31,6 +31,7 @@ static const char version[] = "\n@ dpride Version 1.23 \n";
 //#define FILTER_DEBUG (1)
 //#define CMD_DEBUG (1)
 //#define CT_DEBUG (1)
+//#define SIG_DEBUG (1)
 //
 #define msleep(a) usleep((a) * 1000)
 
@@ -1455,12 +1456,30 @@ RETURN_CODE InitBrokers()
 		if (rtn == NULL) {
 			break;
 		}
+		pt = &buf[0];
+		while(isprint(*pt)) {
+			pt++;
+		}
+		*pt = '\0'; // clear the last CR
+#if 0
 		pt = &buf[strlen(buf)] - 1;
-		if (*pt == '\n')
+		if (*pt == '\n') {
 			*pt = '\0'; // clear the last CR
+		}
+#endif
+		
+#if SIG_DEBUG
+		printf("%s %d: [%s]\n", __FUNCTION__, i, &buf[0]);
+
+		printf("%s %d: %02X %02X %02X %02X %02X %02X %02X %02X\n", __FUNCTION__, i,
+		       buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
+#endif
 		pb->Name = strdup(buf);
 		strcat(buf, ".pid");
 		pb->PidPath = MakePath(p->BridgeDirectory, buf);
+#if SIG_DEBUG
+		printf("%s %d: [%s]\n", __FUNCTION__, i, pb->PidPath);
+#endif
 		pb++;
 	}
 	fclose(f);
@@ -1478,20 +1497,28 @@ void NotifyBrokers(long num)
 	char buf[PIDLEN];
 
 	for(i = 0; i < MAX_BROKER; i++, pb++) {
-		if (pb->Name == NULL || pb->Name[0] == '\0')
+#if SIG_DEBUG
+		printf("$%s:%d name=%s path=%s\n",
+		       __FUNCTION__, i, pb->Name, pb->PidPath);
+#endif		
+		if (pb->Name == NULL || pb->Name[0] == '\0') {
+#if SIG_DEBUG
+			printf("$%s: break\n", __FUNCTION__);
+#endif		
 			break;
-
-		//printf("$%s:%d name=%s path=%s\n",
-		//       __FUNCTION__, i, pb->Name, pb->PidPath);
-		
+		}
 		f = fopen(pb->PidPath, "r");
 		if (f == NULL) {
-			//Warn("no pid file");
+#if SIG_DEBUG
+			Warn("no pid file");
+#endif
 			continue;
 		}
 		rtn = fgets(buf, PIDLEN, f);
 		if (rtn == NULL) {
-			//Warn("pid file read error");
+#if SIG_DEBUG
+			Warn("pid file read error");
+#endif
 			fclose(f);
 			continue;
 		}
@@ -1499,9 +1526,19 @@ void NotifyBrokers(long num)
 		fclose(f);
 
 		// Notify to each broker
+#if SIG_DEBUG
+                printf("$%s:%d pid=%d num=%ld\n",
+			__FUNCTION__, i, pb->pid, num);
+#endif
                 if (sigqueue(pb->pid, SIG_BROKERS, (sigval_t) ((void *) num)) < 0){
-                        //Warn("sigqueue error");
+#if SIG_DEBUG		
+                        Warn("sigqueue error");
+#endif			
                 }
+#if SIG_DEBUG		
+                printf("$%s:%d pid=%d END post\n",
+                       __FUNCTION__, i, pb->pid);
+#endif
 	}
 }
 
@@ -2143,6 +2180,7 @@ int main(int ac, char **av)
 #endif
 	EoParameter(ac, av, p);
 	p->PidPath = MakePath(p->BridgeDirectory, PID_FILE);
+
 	f = fopen(p->PidPath, "w");
 	if (f == NULL) {
 		fprintf(stderr, ": cannot create pid file=%s\n",

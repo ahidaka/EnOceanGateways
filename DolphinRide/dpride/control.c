@@ -668,15 +668,9 @@ void WriteVldBridgeFile(uint Id, byte *Data)
 	NODE_TABLE *nt = GetTableId(Id);
 	PROFILE_CACHE *pp;
 	UNIT *pu;
-	ULONG64 rawData;
 	ULONG64 partialData;
 	double convertedData;
-	enum { bitMask = 0xFFFFFFFFFFFFFFFFULL };
-	UINT maxBitOffset;
-	UINT tmpBitOffset;
-	UINT actualByteSize;
 	char *fileName;
-#define SIZE_MASK(n) (bitMask >> (64 - (n)))
 
 #if VLD_DEBUG
 	printf("*%s: %08X data=%02X %02X %02X %02X %02X %02X scnt=%d\n", __FUNCTION__,
@@ -694,46 +688,15 @@ void WriteVldBridgeFile(uint Id, byte *Data)
 
 	LogMessageStart(Id, pp->StrKey);
 
-	// Examine the total byte counts in VLD data packet
-	maxBitOffset = 0;
 	pu = &pp->Unit[0];
 	for(i = 0; i < nt->SCCount; i++) {
-		tmpBitOffset = pu->FromBit + pu->SizeBit - 1;
-		if (maxBitOffset < tmpBitOffset) {
-			maxBitOffset = tmpBitOffset;
-		}
-		pu++;
-	}
-	actualByteSize = (maxBitOffset + 7) / 8;
-
-	rawData = Data[0];
-	// Caluculate the raw data word;
-	for(i = 1; i < actualByteSize; i++) {
-		//printf("**** rawData=%lx\n", rawData);
-		rawData <<= 8;
-		//printf("**** rawData=%lx\n", rawData);
-		rawData |= Data[i];
-		//printf("**** rawData=%lx\n", rawData);
-	}
-#if VLD_DEBUG
-	printf("**** maxBitOffset=%u actualByteSize=%u rawData=%llu(0x%0llx)\n",
-	       maxBitOffset, actualByteSize, rawData, rawData);
-#endif
-	pu = &pp->Unit[0];
-	for(i = 0; i < nt->SCCount; i++) {
-		int maxBitPos = actualByteSize * 8 -1;
-		int newFromBit = maxBitPos - (pu->FromBit + pu->SizeBit - 1);
 
 		fileName = nt->SCuts[i];
-		partialData = (rawData >> newFromBit) & SIZE_MASK(pu->SizeBit);
-
-                // SIZE_MASK(n) (bitMask >> (64 - (n)))		
-		//printf("****SIZE_MASK=%lx\n", SIZE_MASK(pu->SizeBit));
-
+		partialData = GetBits(&Data[0], pu->FromBit, pu->SizeBit);
 		convertedData = pu->ValueType == VT_Data ? partialData * pu->Slope + pu->Offset : partialData;
 #if VLD_DEBUG
-		printf("****%s:R=%llu PD=%llu fr=%u nw=%u sz=%u sl=%.2lf of=%.2lf dt=%.2lf\n",
-		       fileName, rawData, partialData, pu->FromBit, newFromBit, pu->SizeBit,
+		printf("****%s:PD=%llu tp=%u fr=%u sz=%u sl=%.2lf of=%.2lf dt=%.2lf\n",
+		       fileName, partialData, pu->ValueType, pu->FromBit, pu->SizeBit,
 		       pu->Slope, pu->Offset, convertedData);
 #endif
 		WriteBridge(fileName, convertedData, pu->Unit);
@@ -744,7 +707,6 @@ void WriteVldBridgeFile(uint Id, byte *Data)
 		//       pu->Slope, pu->Offset);
 		pu++;
 	}
-#undef SIZE_MASK
 }
 
 void WriteCdBridgeFile(uint Id, byte *Data)

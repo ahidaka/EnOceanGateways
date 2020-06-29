@@ -25,7 +25,7 @@
 #include "../eolib/secure.h"
 
 static const char copyright[] = "\n(c) 2017 Device Drivers, Ltd. \n";
-static const char version[] = "\n@ dpride Version 1.23 \n";
+static const char version[] = "\n@ dpride Version 1.25 \n";
 
 //#define SECURE_DEBUG (1)
 //#define FILTER_DEBUG (1)

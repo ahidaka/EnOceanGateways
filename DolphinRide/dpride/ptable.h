@@ -59,7 +59,7 @@ typedef struct _eep_table
 // EEP Profile cache
 //
 typedef struct _unit {
-	VALUE_TYPE ValueType;
+        VALUE_TYPE ValueType;
         char *SCut;
         char *Unit;
         char *DName;
@@ -67,13 +67,12 @@ typedef struct _unit {
         INT SizeBit;
         double Slope;
         double Offset;
-	// char *EnumArray[]; // not implemented now
+        // char *EnumArray[]; // not implemented now
 } UNIT;
 
 typedef struct _profile_cache {
-	char StrKey[16];
+        char StrKey[16];
         UNIT Unit[SC_SIZE];
-
 } PROFILE_CACHE;
 
 //

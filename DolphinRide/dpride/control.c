@@ -183,16 +183,16 @@ PROFILE_CACHE *GetEepCache(char *Eep)
 	int i;
 	PROFILE_CACHE *pp = &CacheTable[0];
 
-        for(i = 0; i < NODE_TABLE_SIZE; i++) {
-                if (!strcmp(Eep, pp->StrKey)) {
-                        break;
-                }
-                else if (pp->StrKey[0] == '\0') {
-			// reach to end, not found
-                        return NULL;
-                }
+	for(i = 0; i < NODE_TABLE_SIZE; i++) {
+		if (!strcmp(Eep, pp->StrKey)) {
+				break;
+		}
+		else if (pp->StrKey[0] == '\0') {
+		// reach to end, not found
+			return NULL;
+		}
 		pp++;
-        }
+	}
 	if (i == NODE_TABLE_SIZE) {
 		// not found
 		pp = NULL;
@@ -309,8 +309,6 @@ int CacheProfiles(void)
 	//CM_TABLE *model;
 	int lineCount = 0;
 
-	//printf("******* ReadCsv\n");
-	
 	nt = &NodeTable[0];
 
 	while(true) {
@@ -335,7 +333,7 @@ int CacheProfiles(void)
 
 int ReadModel(char *Filename)
 {
-        const int bufferSize = BUFSIZ / 4;
+	const int bufferSize = BUFSIZ / 4;
 	char buf[bufferSize];
 	BYTE binArray[bufferSize];
 	FILE *fd;
@@ -352,51 +350,51 @@ int ReadModel(char *Filename)
 
 	CmCleanUp();
 
-        do {
-                memset(buf, 0, bufferSize);
-                memset(binArray, 0, bufferSize);
+	do {
+		memset(buf, 0, bufferSize);
+		memset(binArray, 0, bufferSize);
 		s = fgets(buf, bufferSize, fd);
-                if (s == NULL || *s == '\0')
-                        break;
+		if (s == NULL || *s == '\0')
+				break;
 
-                if (buf[strlen(buf) - 1] == '\n') {
-                        buf[strlen(buf) - 1] = '\0';
-                }
+		if (buf[strlen(buf) - 1] == '\n') {
+				buf[strlen(buf) - 1] = '\0';
+		}
 
-                length = CmTextToBin(buf, binArray);
-                pmc = CmGetModel((BYTE *)binArray, length);
-                if (pmc != NULL && pmc->Count > 0) {
+		length = CmTextToBin(buf, binArray);
+		pmc = CmGetModel((BYTE *)binArray, length);
+		if (pmc != NULL && pmc->Count > 0) {
 #ifdef MODEL_DEBUG
 			int i;
-                        printf("####[%s] '%s' count=%d len=%d\n\n\n",
-                               pmc->CmStr, pmc->Title, pmc->Count, length);
+			printf("####[%s] '%s' count=%d len=%d\n\n\n",
+				pmc->CmStr, pmc->Title, pmc->Count, length);
 			for(i = 0; i < pmc->Count; i++) {
 				DATAFIELD *pd = &pmc->Dtable[i];
 				if (pd->ShortCut == NULL)
 					break;
 				printf("#### %d:%s-%s[%s] %d,%d %d,%d %f,%f(%s)\n",
-				       i, _value_type_string[pd->ValueType & 3],
-				       pd->DataName,
-				       pd->ShortCut,
-				       pd->BitOffs,
-				       pd->BitSize,
-				       pd->RangeMin,
-				       pd->RangeMax,
-				       pd->ScaleMin,
-				       pd->ScaleMax,
-				       pd->Unit);
+					i, _value_type_string[pd->ValueType & 3],
+					pd->DataName,
+					pd->ShortCut,
+					pd->BitOffs,
+					pd->BitSize,
+					pd->RangeMin,
+					pd->RangeMax,
+					pd->ScaleMin,
+					pd->ScaleMax,
+					pd->Unit);
 			}
 #endif
 			count++;
-                }
-                else {
-                        fprintf(stderr, "CmGetModel error count=%d!\n", count);
+		}
+		else {
+			fprintf(stderr, "CmGetModel error count=%d!\n", count);
 			break;
-                }
-        }
-        while(s != NULL);
+		}
+	}
+	while(s != NULL);
 
-        fclose(fd);
+	fclose(fd);
 
 	return count;
 }
@@ -513,7 +511,7 @@ void WriteRpsBridgeFile(uint Id, byte *Data)
 		return;
 	}
 	
-	LogMessageStart(Id, pp->StrKey);
+	LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
 	
         //F6-02-04
 	if (!strcmp(pp->StrKey, "F6-02-04")) {
@@ -597,7 +595,7 @@ void Write1bsBridgeFile(uint Id, byte *Data)
 		return;
 	}
 	
-	LogMessageStart(Id, pp->StrKey);
+	LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
 
         //D5-00-01
 	pu = &pp->Unit[0];
@@ -639,7 +637,7 @@ void Write4bsBridgeFile(uint Id, byte *Data)
 		return;
 	}
 
-	LogMessageStart(Id, pp->StrKey);
+	LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
 
 	pu = &pp->Unit[0];
 	for(i = 0; i < nt->SCCount; i++) {
@@ -686,7 +684,7 @@ void WriteVldBridgeFile(uint Id, byte *Data)
 		return;
 	}
 
-	LogMessageStart(Id, pp->StrKey);
+	LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
 
 	pu = &pp->Unit[0];
 	for(i = 0; i < nt->SCCount; i++) {
@@ -747,7 +745,7 @@ void WriteCdBridgeFile(uint Id, byte *Data)
 		return;
 	}
 
-	LogMessageStart(Id, pp->StrKey);
+	LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
 
 	pu = &pp->Unit[0];
 	for(i = 0; i < nt->SCCount; i++) {
@@ -805,7 +803,7 @@ void WriteSdBridgeFile(uint Id, byte *Data)
 		return;
 	}
 
-	LogMessageStart(Id, pp->StrKey);
+	LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
 
 	count = GetBits(Data, 0, headerSize); // SD Header
 	fromBit = headerSize;

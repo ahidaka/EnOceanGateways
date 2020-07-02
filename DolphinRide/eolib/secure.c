@@ -244,7 +244,7 @@ VOID WriteRlc(PUBLICKEY *pt)
 	fclose(f);
 }
 
-VOID DeletePublickey(EO_CONTROL *p)
+VOID DeletePublickey(char *PublickeyPath)
 {
 	INT i;
 	PUBLICKEY *pt;
@@ -256,11 +256,11 @@ VOID DeletePublickey(EO_CONTROL *p)
 			pt->Id = 0UL;
 		}
 	}
-	unlink(p->PublickeyPath);	
+	unlink(PublickeyPath);	
 }
 
 #ifndef NEED_MAIN
-VOID ReloadPublickey(EO_CONTROL *p)
+VOID ReloadPublickey(char *PublickeyPath)
 {
 	INT i;
 	CHAR buffer[BUFSIZ / 8];
@@ -278,14 +278,11 @@ VOID ReloadPublickey(EO_CONTROL *p)
 			return;
 		}
 	}
-        if (p->PublickeyPath == NULL) {
-		p->PublickeyPath = MakePath(p->BridgeDirectory, p->PublickeyFile);
-	}
 	// Read old keyfile
-	f = fopen(p->PublickeyPath, "r");
+	f = fopen(PublickeyPath, "r");
 	if (f != NULL) {
 #ifdef SECURE_DEBUG
- 		printf("Opened=%s\n", p->PublickeyPath);
+ 		printf("Opened=%s\n", PublickeyPath);
 #endif
 		pt =  &PublickeyTable[0];
 		for(i = 0; i < PUBLICKEY_TABLE_SIZE; i++) {
@@ -321,9 +318,7 @@ VOID ReloadPublickey(EO_CONTROL *p)
 		fclose(f);
 	}
 	else {
-		if (p->Debug > 1) {
-			Warn("No publickey file");
-		}
+		Warn("No publickey file");
 	}
 }
 

@@ -72,8 +72,8 @@ extern PUBLICKEY *PublickeyTable;
 VOID ReadRlc(PUBLICKEY *pt);
 VOID WriteRlc(PUBLICKEY *pt);
 
-VOID ReloadPublickey(EO_CONTROL *p);
-VOID DeletePublickey(EO_CONTROL *p);
+VOID ReloadPublickey(char *PublickeyPath);
+VOID DeletePublickey(char *PublickeyPath);
 
 PUBLICKEY *AddPublickey(EO_CONTROL *p, UINT Id, BYTE *Rlc, BYTE *Key);
 PUBLICKEY *GetPublickey(UINT Id);

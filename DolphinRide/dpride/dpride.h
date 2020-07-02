@@ -178,7 +178,7 @@ void WriteSdBridgeFile(uint Id, byte *Data);
 
 void WriteBridge(char *FileName, double ConvertedData, char *Unit);
 
-void LogMessageStart(uint Id, char *Eep);
+void LogMessageStart(uint Id, char *Eep, char *Prefix);
 
 FILE *EoLogInit(char *Prefix, char *Extension);
 

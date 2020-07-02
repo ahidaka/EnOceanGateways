@@ -79,8 +79,8 @@ void ClearTableId(void)
 
 int GetTableIndex(uint Target)
 {
-        NODE_TABLE *nt = &NodeTable[0];
-        NODE_TABLE *targetNT;
+	NODE_TABLE *nt = &NodeTable[0];
+	NODE_TABLE *targetNT;
 
 #if NODE_DEBUG
 	printf("*N*%s:Target=%08X\n", __FUNCTION__, Target);
@@ -276,7 +276,7 @@ int ReadCsv(char *Filename)
 					break;
 				printf("          %d:%s\n", i, nt->SCuts[i]);
 			}
-#endif			/////////			
+#endif		/////////			
 		}
 		nt++;
 		lineCount++;

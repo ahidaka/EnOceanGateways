@@ -736,7 +736,7 @@ int InitEep(char *Profile)
 	int ret, count;
 	int numField;
 
-	static DATAFIELD A5_02_05[2] =
+	static DATAFIELD _A5_02_05[2] =
 	{
 		{
 			1,
@@ -756,7 +756,7 @@ int InitEep(char *Profile)
 		}
 	};
 
-	static DATAFIELD A5_04_01[4] =
+	static DATAFIELD _A5_04_01[4] =
 	{
 		{
 			1,
@@ -802,7 +802,7 @@ int InitEep(char *Profile)
 		}
 	};
 	
-	static DATAFIELD A5_04_03[4] =
+	static DATAFIELD _A5_04_03[4] =
 	{
 		{
 			1,
@@ -848,7 +848,7 @@ int InitEep(char *Profile)
 		}
 	};
 	
-	static DATAFIELD A5_06_02[5] =
+	static DATAFIELD _A5_06_02[5] =
 	{
 		{
 			1,
@@ -907,7 +907,7 @@ int InitEep(char *Profile)
 		}
 	};
 	
-	static DATAFIELD A5_06_03[3] =
+	static DATAFIELD _A5_06_03[3] =
 	{
 		{
 			1,
@@ -940,7 +940,7 @@ int InitEep(char *Profile)
 		}
 	};
 	
-	static DATAFIELD A5_14_05[3] =
+	static DATAFIELD _A5_14_05[3] =
 	{
 		{
 			1,
@@ -973,7 +973,7 @@ int InitEep(char *Profile)
 		}
 	};
 	
-	static DATAFIELD D2_03_20_ES =
+	static DATAFIELD _D2_03_20_ES =
 	{
 		3,
 		"Energy Supply",
@@ -988,7 +988,7 @@ int InitEep(char *Profile)
 		{{0, NULL}}, //Enum
 	}; 
 
-	static DATAFIELD D2_14_40[9] =
+	static DATAFIELD _D2_14_40[9] =
 	{
 		{
 			1,
@@ -1086,7 +1086,7 @@ int InitEep(char *Profile)
 		}
 	};						
 
-	static DATAFIELD D2_14_41[10] =
+	static DATAFIELD _D2_14_41[10] =
 	{
 		{
 			1,
@@ -1197,7 +1197,7 @@ int InitEep(char *Profile)
 		}
 	};						
 
-	static DATAFIELD D2_32_00[4] =
+	static DATAFIELD _D2_32_00[4] =
 	{
 		{
 			3,
@@ -1243,7 +1243,7 @@ int InitEep(char *Profile)
 		}
 	};						
 
-	static DATAFIELD D2_32_01[5] =
+	static DATAFIELD _D2_32_01[5] =
 	{
 		{
 			3,
@@ -1302,7 +1302,7 @@ int InitEep(char *Profile)
 		}
 	};						
 
-	static DATAFIELD D2_32_02[6] =
+	static DATAFIELD _D2_32_02[6] =
 	{
 		{
 			3,
@@ -1374,7 +1374,7 @@ int InitEep(char *Profile)
 		}
 	};						
 
-	static DATAFIELD D5_00_01_CO =
+	static DATAFIELD _D5_00_01_CO =
 	{
 		3,
 		"Contact",
@@ -1438,93 +1438,95 @@ int InitEep(char *Profile)
 	_D printf("AddEEP count=%d\n", count);
 	if (SaveEep(&EepTable[count], 1, "A5-02-05",
 		    "Temperature Sensor Range 0°C to +40°C",
-		    &A5_02_05[0]) > 0) {
+		    &_A5_02_05[0]) > 0) {
 		count++;
 	}
 
 	_D printf("AddEEP count=%d\n", count);
 	if (SaveEep(&EepTable[count], 3, "A5-04-01",
 		    "Temperature and Humidity Sensor",
-		    &A5_04_01[0]) > 0) {
+		    &_A5_04_01[0]) > 0) {
 		count++;
 	}
     
 	_D printf("AddEEP count=%d\n", count);
 	if (SaveEep(&EepTable[count], 3, "A5-04-03",
 		    "Temperature and Humidity Sensor",
-		    &A5_04_03[0]) > 0) {
+		    &_A5_04_03[0]) > 0) {
 		count++;
 	}
     
 	_D printf("AddEEP count=%d\n", count);
 	if (SaveEep(&EepTable[count], 4, "A5-06-02",
 		    "Light Sensor",
-		    &A5_06_02[0]) > 0) {
+		    &_A5_06_02[0]) > 0) {
 		count++;
 	}
    
 	_D printf("AddEEP count=%d\n", count);
 	if (SaveEep(&EepTable[count], 2, "A5-06-03",
 		    "Light Sensor",
-		    &A5_06_03[0]) > 0) {
+		    &_A5_06_03[0]) > 0) {
 		count++;
 	}
    
 	_D printf("AddEEP count=%d\n", count);
 	if (SaveEep(&EepTable[count], 2, "A5-14-05",
 		    "Vibration/Tilt, Supply voltage monitor",
-		    &A5_14_05[0]) > 0) {
+		    &_A5_14_05[0]) > 0) {
 		count++;
 	}
 	
 	_D printf("AddEEP count=%d\n", count);
 	if (SaveEep(&EepTable[count], 1, "D2-03-20",
 		    "Beacon with Vibration Detection",
-		    &D2_03_20_ES) > 0) { //Add Custom "D2-03-20",
+		    &_D2_03_20_ES) > 0) { //Add Custom "D2-03-20",
 		count++;
 	}
 
 	_D printf("AddEEP count=%d\n", count);
 	if (SaveEep(&EepTable[count], 8, "D2-14-40",
 		    "Multi Function Sensors",
-		    &D2_14_40[0]) > 0) {
+		    &_D2_14_40[0]) > 0) {
 		count++;
 	}
 	
 	_D printf("AddEEP count=%d\n", count);
 	if (SaveEep(&EepTable[count], 9, "D2-14-41",
 		    "Multi Function Sensors",
-		    &D2_14_41[0]) > 0) {
+		    &_D2_14_41[0]) > 0) {
 		count++;
 	}
 
 	_D printf("AddEEP count=%d\n", count);
 	if (SaveEep(&EepTable[count], 3, "D2-32-00",
 		    "A.C. Current Clamp",
-		    &D2_32_00[0]) > 0) {
+		    &_D2_32_00[0]) > 0) {
 		count++;
 	}
 
 	_D printf("AddEEP count=%d\n", count);
 	if (SaveEep(&EepTable[count], 4, "D2-32-01",
 		    "A.C. Current Clamp",
-		    &D2_32_01[0]) > 0) {
+		    &_D2_32_01[0]) > 0) {
 		count++;
 	}
 
 	_D printf("AddEEP count=%d\n", count);
 	if (SaveEep(&EepTable[count], 5, "D2-32-02",
 		    "A.C. Current Clamp",
-		    &D2_32_02[0]) > 0) {
+		    &_D2_32_02[0]) > 0) {
 		count++;
 	}
 
 	_D printf("AddEEP count=%d\n", count);
 	if (SaveEep(&EepTable[count], 1, "D5-00-01",
 		    "Single Input Contact",
-		    &D5_00_01_CO) > 0) {
+		    &_D5_00_01_CO) > 0) {
 		count++;
 	}
+
+#include "ptable_extra.inc"
 
 	_D printf("AddEEP LAST count=%d\n", count);
 	SaveEep(&EepTable[count], 0, "\0", "\0", NULL); //Add end if table mark

@@ -70,4 +70,4 @@ install: dpride dppoint
 	cp -p dpride dppoint eologfile /usr/local/bin
 
 clean:
-	/bin/rm -f *.o *~ $(TARGET) make.date
+	/bin/rm -f core *.o *~ $(TARGET) make.date

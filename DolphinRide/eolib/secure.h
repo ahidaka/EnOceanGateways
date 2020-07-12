@@ -8,11 +8,8 @@
 //#include "eoif.h"
 
 #define KEY_SIZE (128/8) //16
-#define RLC_SIZE (4)
+#define MAX_RLC_SIZE (4)
 #define CMAC_SIZE (4)
-
-//int eo_encrypt(uint8_t *key, uint8_t *in, uint8_t *out);
-//int eo_decrypt(uint8_t *key, uint8_t *in, uint8_t *out);
 
 typedef enum {
 	NO_ENTRY = 0,
@@ -24,7 +21,7 @@ typedef void *SEC_HANDLE;
 
 INT SecInit(void);
 
-SEC_HANDLE SecCreate(BYTE *Rlc, BYTE *Key);
+SEC_HANDLE SecCreate(BYTE *Rlc, BYTE *Key, INT RlcLength);
 void SecFree(SEC_HANDLE h);
 
 INT SecUpdate(SEC_HANDLE h);
@@ -37,27 +34,20 @@ INT SecDecrypt(SEC_HANDLE h, BYTE *Packet, INT Length, BYTE *Data);
 
 //
 // Publickey supporting stuff
+// Security supporting stuff
 //
 typedef struct _pulickey {
 	UINT Id;
-	BYTE Rlc[RLC_SIZE];
+	UINT RlcLength;
+	UINT Slf;
+	BYTE Rlc[MAX_RLC_SIZE];
 	BYTE Key[KEY_SIZE];
 	CHAR *RlcPath;
 	INT Option; // for advanced use to hide keys
-} PUBLICKEY;
-
-//
-// Security supporting stuff
-//
-typedef struct _secure_register {
-	UINT Id;
 	PACKET_ENTRY Status;
 	INT Info;
-	INT Slf;
 	SEC_HANDLE Sec;
-	BYTE Rlc[RLC_SIZE];
-	BYTE Key[KEY_SIZE];
-} SECURE_REGISTER;
+} PUBLICKEY, SECURE_REGISTER;
 
 #define SECURE_REGISTER_SIZE (4)
 
@@ -66,16 +56,22 @@ SECURE_REGISTER *NewSecureRegister(void);
 SECURE_REGISTER *GetSecureRegister(UINT Id);
 SECURE_REGISTER *ClearSecureRegister(UINT Id);
 
+INT RlcLength(INT Slf);
+
 #define PUBLICKEY_TABLE_SIZE (128)
 extern PUBLICKEY *PublickeyTable;
-
-VOID ReadRlc(PUBLICKEY *pt);
-VOID WriteRlc(PUBLICKEY *pt);
 
 VOID ReloadPublickey(char *PublickeyPath);
 VOID DeletePublickey(char *PublickeyPath);
 
-PUBLICKEY *AddPublickey(EO_CONTROL *p, UINT Id, BYTE *Rlc, BYTE *Key);
+PUBLICKEY *AddPublickey(EO_CONTROL *p, UINT Id, SECURE_REGISTER *ps);
 PUBLICKEY *GetPublickey(UINT Id);
-PUBLICKEY *UpdateRlc(UINT Id, BYTE *Rlc);
 PUBLICKEY *ClearPublickey(UINT Id);
+
+void PrintKey(SECURE_REGISTER *ps);
+
+#if SEC_DEVELOP	
+VOID ReadRlc(PUBLICKEY *pt);
+VOID WriteRlc(PUBLICKEY *pt);
+PUBLICKEY *UpdateRlc(UINT Id, BYTE *Rlc);
+#endif

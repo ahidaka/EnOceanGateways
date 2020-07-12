@@ -41,7 +41,7 @@
 #define BUF_LEN 1024
 #define WS_MSGLEN 125
 
-//#define PACKET_DUMP
+//#define PACKET_DUMP ////
 #ifndef bool
 	#define bool int
 #endif
@@ -53,7 +53,7 @@
 #endif
 
 //#define PRINTF(fmt, ...) printf("#%s: " fmt, __func__, ##__VA_ARGS__)
-#define PRINTF(fmt, ...) 
+#define PRINTF(fmt, ...) ////
 
 typedef struct {
 	int clientSocket;

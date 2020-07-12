@@ -43,6 +43,11 @@ typedef enum _eo_mode
         Monitor, Register, Operation
 } EO_MODE;
 
+typedef enum _erp_mode
+{
+        ERP1=0, ERP2=1
+} ERP_MODE;
+
 typedef struct _eo_control
 {
         EO_MODE Mode;
@@ -52,6 +57,7 @@ typedef struct _eo_control
         int Logger;
         int LocalLog;
         int Timeout;
+        int XFlags;
 	EO_FILE_OP FilterOp;
         int Debug;
 	int ControlCount;
@@ -116,6 +122,7 @@ typedef struct _node_table {
         int SCCount;
         char **SCuts;
         void *Secure; // Pointer to SecureTable
+        int SecureMark;
 } NODE_TABLE;
 
 //

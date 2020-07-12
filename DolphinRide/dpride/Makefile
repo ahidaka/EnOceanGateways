@@ -13,7 +13,7 @@ EOLIB = $(LIBDIR)/eolib.a
 all: $(TARGET)
 	touch make.date
 
-dpride: $(DPOBJS)
+dpride: $(DPOBJS) $(EOLIB)
 	$(CC) $(CFLAGS) $(DPOBJS) -o dpride $(EOLIB) -lpthread -lxml2
 
 sample-broker: node.o sample-broker.c EoControl.c

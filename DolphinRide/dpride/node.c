@@ -251,7 +251,6 @@ int ReadCsv(char *Filename)
 		eep = NULL;
 		scCount = DecodeLine(buf, &id, &eep, &desc, &scs);
 		if (scCount > 0) {
-			////////
 #if NODE_DEBUG
 			int i;
 #endif
@@ -260,17 +259,19 @@ int ReadCsv(char *Filename)
 			//	; ////free(nt->SCuts);
 			//}
 			nt->Id = id;
-			nt->Eep = eep;
+			nt->Eep = eep[0] == '!' ? &eep[1] : eep;
 			nt->Desc = desc;
 			nt->SCuts = scs;
 			nt->SCCount = scCount;
+			nt->SecureMark =  eep[0] == '!' ? eep[0] : 0; 
 			if (lineCount >= NODE_TABLE_SIZE) {
 				Error("Node Table overflow");
 				break;
 			}
-			/////////
+
 #if NODE_DEBUG
-			printf("*N*ReadCsv %s=<%s>(%d)\n", nt->Eep, nt->Desc, nt->SCCount);
+			printf("*N*ReadCsv %s=<%s>(%d)%c\n",
+				nt->Eep, nt->Desc, nt->SCCount, nt->SecureMark);
 			for(i = 0; i < nt->SCCount; i++) {
 				if (nt->SCuts[i] == NULL)
 					break;

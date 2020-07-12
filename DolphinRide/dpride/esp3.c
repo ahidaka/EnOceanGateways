@@ -213,7 +213,7 @@ ESP_STATUS CO_ReadFilter(OUT INT *count, OUT BYTE *Ids)
 	return status;
 }
 
-ESP_STATUS CO_WriteMode(IN INT Mode) //1:ERP1, 2:ERP2
+ESP_STATUS CO_WriteMode(IN INT Mode) //0:ERP1, 1:ERP2
 {
 	ESP_STATUS status = OK;
 	BYTE buffer[DATABUFSIZ];
@@ -268,59 +268,59 @@ void SetCommand(ESP3_CMD Cmd, BYTE *Buffer, BYTE *Param)
 	int length = 1;
 
 	switch(Cmd) {
-        case CO_WR_SLEEP: /*1 Order to enter in energy saving mode */
+	case CO_WR_SLEEP: /*1 Order to enter in energy saving mode */
 		length = 5;
 		break;
-        case CO_WR_RESET: /*2 Order to reset the device */
-        case CO_RD_VERSION: /*3 Read the device (SW) version / (HW) version, chip ID etc. */
-        case CO_RD_SYS_LOG: /*4 Read system log from device databank */
-        case CO_WR_SYS_LOG: /*5 Reset System log from device databank */
-        case CO_WR_BIST: /*6 Perform Flash BIST operation */
-        case CO_WR_IDBASE: /*7 Write ID range base number */
+	case CO_WR_RESET: /*2 Order to reset the device */
+	case CO_RD_VERSION: /*3 Read the device (SW) version / (HW) version, chip ID etc. */
+	case CO_RD_SYS_LOG: /*4 Read system log from device databank */
+	case CO_WR_SYS_LOG: /*5 Reset System log from device databank */
+	case CO_WR_BIST: /*6 Perform Flash BIST operation */
+	case CO_WR_IDBASE: /*7 Write ID range base number */
 		break;
-        case CO_RD_IDBASE: /*8 Read ID range base number */
+	case CO_RD_IDBASE: /*8 Read ID range base number */
 		length = NOT_SUPPORTED;
 		break;
-        case CO_WR_REPEATER: /*9 Write Repeater Level off,1,2 */
+	case CO_WR_REPEATER: /*9 Write Repeater Level off,1,2 */
 		length = 3;
 		break;
-        case CO_RD_REPEATER: /*10 Read Repeater Level off,1,2 */
+	case CO_RD_REPEATER: /*10 Read Repeater Level off,1,2 */
 		break;
-        case CO_WR_FILTER_ADD: /*11 Add filter to filter list */
+	case CO_WR_FILTER_ADD: /*11 Add filter to filter list */
 		length = 7;
 		break;
-        case CO_WR_FILTER_DEL: /*12 Delete filter from filter list */
+	case CO_WR_FILTER_DEL: /*12 Delete filter from filter list */
 		length = 6;
 		break;
-        case CO_WR_FILTER_DEL_ALL: /*13 Delete all filter */
+	case CO_WR_FILTER_DEL_ALL: /*13 Delete all filter */
 		break;
-        case CO_WR_FILTER_ENABLE: /*14 Enable/Disable supplied filters */
+	case CO_WR_FILTER_ENABLE: /*14 Enable/Disable supplied filters */
 		length = 3;
 		break;
-        case CO_RD_FILTER: /*15 Read supplied filters */
+	case CO_RD_FILTER: /*15 Read supplied filters */
 		break;
-        case CO_WR_WAIT_MATURITY: /*16 Waiting till end of maturity time before received radio telegrams will transmitted */
-        case CO_WR_SUBTEL: /*17 Enable/Disable transmitting additional subtelegram info */
-        case CO_WR_MEM: /*18 Write x bytes of the Flash, XRAM, RAM0 …. */
-        case CO_RD_MEM: /*19 Read x bytes of the Flash, XRAM, RAM0 …. */
-        case CO_RD_MEM_ADDRESS: /*20 Feedback about the used address and length of the config area and the Smart Ack Table */
-        case CO_RD_SECURITY: /*21 Read own security information (level, key) */
-        case CO_WR_SECURITY: /*22 Write own security information (level, key) */
-        case CO_WR_LEARNMODE: /*23 Enable/disable learn mode */
-        case CO_RD_LEARNMODE: /*24 Read learn mode */
-        case CO_WR_SECUREDEVICE_ADD: /*25 Add a secure device */
-        case CO_WR_SECUREDEVICE_DEL: /*26 Delete a secure device */
-        case CO_RD_SECUREDEVICE_BY_INDEX: /*27 Read secure device by index */
+	case CO_WR_WAIT_MATURITY: /*16 Waiting till end of maturity time before received radio telegrams will transmitted */
+	case CO_WR_SUBTEL: /*17 Enable/Disable transmitting additional subtelegram info */
+	case CO_WR_MEM: /*18 Write x bytes of the Flash, XRAM, RAM0 …. */
+	case CO_RD_MEM: /*19 Read x bytes of the Flash, XRAM, RAM0 …. */
+	case CO_RD_MEM_ADDRESS: /*20 Feedback about the used address and length of the config area and the Smart Ack Table */
+	case CO_RD_SECURITY: /*21 Read own security information (level, key) */
+	case CO_WR_SECURITY: /*22 Write own security information (level, key) */
+	case CO_WR_LEARNMODE: /*23 Enable/disable learn mode */
+	case CO_RD_LEARNMODE: /*24 Read learn mode */
+	case CO_WR_SECUREDEVICE_ADD: /*25 Add a secure device */
+	case CO_WR_SECUREDEVICE_DEL: /*26 Delete a secure device */
+	case CO_RD_SECUREDEVICE_BY_INDEX: /*27 Read secure device by index */
 		length = NOT_SUPPORTED;
 		break;
-        case CO_WR_MODE: /*28 Sets the gateway transceiver mode */
+	case CO_WR_MODE: /*28 Sets the gateway transceiver mode */
 		length = 2;
 		break;
 
 	/* Special function */
-        case CFG_WR_ESP3_MODE: /*28 Sets the gateway transceiver mode */
+	case CFG_WR_ESP3_MODE: /*28 Sets the gateway transceiver mode */
 		length = 2;
-        case CFG_RD_ESP3_MODE: /*28 Sets the gateway transceiver mode */
+	case CFG_RD_ESP3_MODE: /*28 Sets the gateway transceiver mode */
 		length = 1;
 
 	default:

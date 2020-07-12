@@ -337,6 +337,23 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
 				    pd->ScaleMin = 0;
 				    pd->ScaleMax = 0;
 				    pd->Unit = NULL;
+					if (RangeMin != NULL) {
+						free(RangeMin);
+						RangeMin = NULL;
+					}
+					if (RangeMax != NULL) {
+						free(RangeMax);
+						RangeMax = NULL;
+					}
+					if (ScaleMin != NULL) {
+						free(ScaleMin);
+						ScaleMin = NULL;
+					}
+					if (ScaleMax != NULL) {
+						free(ScaleMax);
+						ScaleMax = NULL;
+					}
+
 				    for(j = 0; j < ENUM_SIZE; j++) {
 					    if (pd->EnumDesc[j].Desc) {
 						    free((void *) pd->EnumDesc[j].Desc);
@@ -605,13 +622,51 @@ int ProcessNode(xmlTextReaderPtr Reader, EEP_TABLE *Table)
     return fieldCount;
 }
 
+#if 0
+void ClearDTable(void)
+{
+#if 0
+	typedef struct _datafield {
+        VALUE_TYPE ValueType; // 0: Not used, 1: Data, 2: Binary Flag, 3: Enumerated data
+        char *DataName;
+        char *ShortCut;
+        int BitOffs;
+        int BitSize;
+        int RangeMin;
+        int RangeMax;
+        float ScaleMin;
+        float ScaleMax;
+        char *Unit;
+        ENUMTABLE EnumDesc[ENUM_SIZE];
+} DATAFIELD;
+#endif
+	DATAFIELD *pd =  &dataTable[0];
+	while(pd->ValueType != 0) {
+		pd->DataName = NULL;
+		pd->ShortCut = NULL;
+        pd->BitOffs =
+        pd->BitSize = 
+        pd->RangeMin =
+        pd->RangeMax =
+        pd->ScaleMin = 0;
+        pd->ScaleMax = 0.0F;
+        pd->Unit = NULL;
+        pd->EnumDesc[0].Index = 
+        pd->EnumDesc[1].Index = 0;
+        pd->EnumDesc[0].Desc = 
+        pd->EnumDesc[1].Desc = NULL;
+		pd++;
+	}
+}
+#endif
+
 void PrintNode(DATAFIELD *pd, int Size)
 {
 	int i, j;
 
 	for(i = 0; i < Size; i++) {
 		if (pd->DataName)
-			printf(" %s:%s(%s) %d %d %d %d %.3f %.3f  %s\n",
+			printf(" %s:%s{%s} %d %d %d %d %.3f %.3f [%s]\n",
 			       _value_type_string[pd->ValueType],
 			       pd->DataName, pd->ShortCut,
 			       pd->BitOffs, pd->BitSize,
@@ -641,7 +696,8 @@ void PrintEepAll()
 
 	while(pe->Eep[0] != '\0' ) {
 		if (pe->Size > 0) {
-			printf("**%s %d %s: %d <%s>\n", __FUNCTION__, fcnt, pe->Eep, pe->Size, pe->Title);
+			printf("**%s %d %s %d <%s>\n", __FUNCTION__,
+			fcnt, pe->Eep, pe->Size, pe->Title);
 			PrintNode(pe->Dtable, pe->Size);
 		}
 		pe++, fcnt++;

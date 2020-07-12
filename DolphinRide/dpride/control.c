@@ -11,12 +11,12 @@
 #include "ptable.h"
 #include "../eolib/models.h"
 
-//#define EDX_DEBUG (1)
+#define EDX_DEBUG (1)
 //#define CMD_DEBUG (1)
 //#define EEP_DEBUG (1)
 //#define VLD_DEBUG (1)
 //#define CD_DEBUG (1)
-//#define MODEL_DEBUG (1)
+#define MODEL_DEBUG (1)
 
 extern void PrintProfileAll(void);
 extern NODE_TABLE NodeTable[];
@@ -327,7 +327,9 @@ int CacheProfiles(void)
 		nt++;
 		lineCount++;
 	}
-
+#ifdef EDX_DEBUG
+	printf("**CacheProfiles: count=%d\n", lineCount);
+#endif
 	return lineCount;
 }
 

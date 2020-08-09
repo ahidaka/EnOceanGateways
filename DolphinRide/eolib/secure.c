@@ -13,7 +13,7 @@
 #include "../dpride/dpride.h"
 #include "secure.h"
 
-#define SECURE_DEBUG 1
+//#define SECURE_DEBUG (1)
 
 #ifdef SECURE_DEBUG
 #define DEBUG_LOG(p) printf("+%s: %s\n", __func__, p);

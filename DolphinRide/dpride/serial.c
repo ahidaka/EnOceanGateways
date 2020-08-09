@@ -67,124 +67,123 @@ INT PacketAnalyze(BYTE *p)
 		0xB2, // 7:GP_CD 
 	};
 
-	if (_GetPacketDebug > 0) {
+	_DEBUG3 printf("**** _GetPacketDebug=%08X\n", _GetPacketDebug);
 
-		_DEBUG3 printf("**** _GetPacketDebug=%08X\n", _GetPacketDebug);
+	for(i = 0; i < idSize; i++) {
+		id[i] = 0;
+	}
 
-		for(i = 0; i < idSize; i++) {
-			id[i] = 0;
+	if ((_GetPacketDebug < _PD_FULLDATA)) {
+		if (printLength > 16)
+			printLength = 16;
+	}
+	//if ((_GetPacketDebug & _PD_EXOPTION) != 0) {
+	//	converToERP2 = TRUE;
+	//}
+	packetType = p[3];
+	telegramType = data[0];
+	extendedTelegramType = data[1];
+
+	if (packetType == 0x0A) {
+		isERP2 = TRUE;
+	}
+
+	if (isERP2) {
+		addressControl = telegramType >> 5;
+		switch(addressControl) {
+		case 0:
+			originatorLength = 3; //
+			break;
+		case 1:
+			originatorLength = 4; //
+			break;
+		case 2:
+			originatorLength = 4; //
+			break;
+		case 3:
+			originatorLength = 6; //
+			break;
+		case 4:
+		case 5:
+		case 6:
+		case 7:
+		default:
+			originatorLength = 0; // means error
+			break;
 		}
 
-		if ((_GetPacketDebug < _PD_FULLDATA)) {
-			if (printLength > 16)
-				printLength = 16;
-		}
-		//if ((_GetPacketDebug & _PD_EXOPTION) != 0) {
-		//	converToERP2 = TRUE;
-		//}
-		packetType = p[3];
-		telegramType = data[0];
-		extendedTelegramType = data[1];
-
-		if (packetType == 0x0A) {
-			isERP2 = TRUE;
-		}
-
-		if (isERP2) {
-			addressControl = telegramType >> 5;
-			switch(addressControl) {
-			case 0:
-				originatorLength = 3; //
-				break;
-			case 1:
-				originatorLength = 4; //
-				break;
-			case 2:
-				originatorLength = 4; //
-				break;
-			case 3:
-				originatorLength = 6; //
-				break;
-			case 4:
-			case 5:
-			case 6:
-			case 7:
-			default:
-				originatorLength = 0; // means error
-				break;
-			}
-
-			switch(telegramType & 0xF) {
-			case 0:
-				rORG = 0xF6; // RPS
-				break;
-			case 1:
-				rORG = 0xD5; //1BS
-				break;
-			case 2:
-				rORG = 0xA5; //4BS
-				break;
-			case 3:
-				rORG = 0xD0; //Smack
-				break;
-			case 4:
-				rORG = 0xD2; // VLD
-				break;
-			case 5:
-				rORG = 0xD4; //UTE
-				break;
-			case 6:
-				rORG = 0xD1; //MSC
-				break;
-			case 7:
-				rORG = 0x30; //SEC
-				break;
-			case 8:
-				rORG = 0x31; //SECD
-				break;
-			case 9:
-				rORG = 0x35; //SEC_TI
-				break;
-			case 0xA:
-				rORG = 0xB3; //GP_SEL
-				break;
-			case 0xF:
-				extendedTelegramTypeAvailable = TRUE;
-				rORG = ((extendedTelegramType & 0xF0) == 0x30) // is Secure ?
-					? extendedTelegramType
-					: ExtendedTelegramTypes[extendedTelegramType & 0x7];
-				printf("A:%2X %2X %2X\n", telegramType, extendedTelegramType, rORG);
-				break;
-			case 0xB:
-			case 0xC:
-			case 0xD:
-			case 0xE:
-			default:
-				rORG = 0x0; //Unknown
-				break;
-			}
-
-			if (extendedTelegramTypeAvailable) {
-				data++;
-			}
-			for(i = 0; i < originatorLength; i++) {
-				id[i] = data[i + 1];
-			}
-			if (originatorLength > erp1IdLength) {
-				// Truncate leading 2 bytes
-				for(i = 0; i < erp1IdLength; i++) {
-					id[i] = id[i + 2];
-				}			
-			}
-		}
-		else { //ERP1
-			rORG = data[0];
-			id[0] = p[headerLength + dataLength - 5]; 
-			id[1] = p[headerLength + dataLength - 4];
-			id[2] = p[headerLength + dataLength - 3];
-			id[3] = p[headerLength + dataLength - 2];
+		switch(telegramType & 0xF) {
+		case 0:
+			rORG = 0xF6; // RPS
+			break;
+		case 1:
+			rORG = 0xD5; //1BS
+			break;
+		case 2:
+			rORG = 0xA5; //4BS
+			break;
+		case 3:
+			rORG = 0xD0; //Smack
+			break;
+		case 4:
+			rORG = 0xD2; // VLD
+			break;
+		case 5:
+			rORG = 0xD4; //UTE
+			break;
+		case 6:
+			rORG = 0xD1; //MSC
+			break;
+		case 7:
+			rORG = 0x30; //SEC
+			break;
+		case 8:
+			rORG = 0x31; //SECD
+			break;
+		case 9:
+			rORG = 0x35; //SEC_TI
+			break;
+		case 0xA:
+			rORG = 0xB3; //GP_SEL
+			break;
+		case 0xF:
+			extendedTelegramTypeAvailable = TRUE;
+			rORG = ((extendedTelegramType & 0xF0) == 0x30) // is Secure ?
+				? extendedTelegramType
+				: ExtendedTelegramTypes[extendedTelegramType & 0x7];
+			_DEBUG printf("A:%2X %2X %2X\n", telegramType, extendedTelegramType, rORG);
+			break;
+		case 0xB:
+		case 0xC:
+		case 0xD:
+		case 0xE:
+		default:
+			rORG = 0x0; //Unknown
+			break;
 		}
 
+		if (extendedTelegramTypeAvailable) {
+			data++;
+		}
+		for(i = 0; i < originatorLength; i++) {
+			id[i] = data[i + 1];
+		}
+		if (originatorLength > erp1IdLength) {
+			// Truncate leading 2 bytes
+			for(i = 0; i < erp1IdLength; i++) {
+				id[i] = id[i + 2];
+			}			
+		}
+	}
+	else { //ERP1
+		rORG = data[0];
+		id[0] = p[headerLength + dataLength - 5]; 
+		id[1] = p[headerLength + dataLength - 4];
+		id[2] = p[headerLength + dataLength - 3];
+		id[3] = p[headerLength + dataLength - 2];
+	}
+
+	if (_GetPacketDebug > 3) {
 		printf("[%02X%02X%02X%02X:%d:%d:%02X] %02X %02X %02X %02X %02X|",
 			id[0], id[1], id[2], id[3], dataLength, optionalLength, rORG,
 			p[0], p[1], p[2], p[3], p[4]);

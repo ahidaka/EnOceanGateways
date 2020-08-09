@@ -33,8 +33,8 @@ static const char version[] = "\n@ dpride Version 1.26 \n";
 //#define CMD_DEBUG (1)
 //#define CT_DEBUG (1)
 //#define SIG_DEBUG (1)
-#define MSG_DEBUG (1)
-#define RAW_INPUT (1) // RAW_INPUT Dosplay for ERP2 DEBUG
+//#define MSG_DEBUG (1)
+//#define RAW_INPUT (1) // RAW_INPUT Display for ERP2 DEBUG
 
 //
 #define msleep(a) usleep((a) * 1000)
@@ -820,6 +820,7 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
 	p->ModelFile = strdup(modelFile);
 
 	PacketDebug(pFlags);
+	ESP_Debug(p->Debug);
 }
 
 int MakeSCutFields(char *line, DATAFIELD *pd, int count)
@@ -1840,7 +1841,7 @@ bool MainJob(BYTE *Buffer)
 	
 	printf("*A"); PacketAnalyze(Buffer);
 
-	if (p->Debug > 0) {
+	if (p->Debug > 1) {
 		printf("*M"); PacketDump(Buffer);
 		printf("D:dLen=%d oLen=%d tot=%d typ=%02X org=%02X\n",
 			dataLength, optionLength, (dataLength + optionLength),
@@ -2205,6 +2206,9 @@ bool MainJob(BYTE *Buffer)
 				}
 				EoSetEep(p, id, data, rOrg);
 				idCount = EoReadControl();
+#if SECURE_DEBUG
+				printf("!S! isSecure=%d IsSecureCDM=%d\n", isSecure, IsSecureCDM(id));
+#endif
 				ps = GetSecureRegister(secId);
 				if (ps == NULL) {
 					if (p->Debug > 2) {
@@ -2247,6 +2251,9 @@ bool MainJob(BYTE *Buffer)
 				EoSetCm(p, id, data, dataLength - 6);
 				idCount = EoReadControl();
 				ps = GetSecureRegister(secId);
+#if SECURE_DEBUG
+				printf("!S! secId=%u ps=%p\n", secId, ps);
+#endif
 				if (ps == NULL) {
 					if (p->Debug > 2) {
 						Warn("No secure telegram");
@@ -2618,6 +2625,11 @@ int main(int ac, char **av)
 		EoClearControl();
 	}
 	else {
+
+#if SECURE_DEBUG
+		printf("!S! main: mode=%s\n", p->Mode == Register ? "Register"
+			: p->Mode == Operation ? "Operation" : "Monitor");
+#endif
 		p->ControlCount = EoReadControl();
 	}
 	if (p->AFlags) {
@@ -2809,7 +2821,9 @@ int main(int ac, char **av)
 				p->Mode = Operation; 
 				p->FilterOp = Read;
 				p->ControlCount = EoReadControl();
-
+#if SECURE_DEBUG
+				printf("!S! main: CMD_CHANGE_MODE, mode=O\n");
+#endif
 				printf("p->ControlCount=%d\n", p->ControlCount);
 				if (p->ControlCount > 0) {
 					if (!EoApplyFilter()) {

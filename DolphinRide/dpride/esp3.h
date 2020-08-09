@@ -107,4 +107,7 @@ extern BYTE Crc8Check(BYTE *data, size_t count);
 
 extern VOID SendCommand(BYTE *cmdBuffer);
 extern ESP_STATUS GetResponse(OUT BYTE *Buffer);
+//
+void ESP_Debug(IN INT Level);
+
 #endif

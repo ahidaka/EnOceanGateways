@@ -45,6 +45,17 @@ typedef unsigned int UINT;
 typedef long LONG;
 typedef unsigned long ULONG;
 
+static INT DebugLevel = 0;
+//
+void ESP_Debug(IN INT Level)
+{
+	DebugLevel = Level;
+}
+
+#define _DEBUG  if (DebugLevel > 0)    // -D:   _ESP_NOTICE
+#define _DEBUG2 if (DebugLevel > 1)    // -DD:  _ESP_VERBOSE
+#define _DEBUG3 if (DebugLevel > 2)    // -DDD: _ESP_NOISY
+
 //
 // CO Command / Response
 //
@@ -55,7 +66,7 @@ ESP_STATUS CO_WriteSleep(IN INT Period) //sleep msec
 	BYTE msBuffer[4];
 	int ms10 = Period / 10;
 
-	printf("%s: ENTER\n", __func__);
+	_DEBUG2 printf("%s: ENTER\n", __func__);
 	msBuffer[3] = ms10 % 0xFF;
 	ms10 >>= 8;
 	msBuffer[2] = ms10 % 0xFF;
@@ -68,7 +79,7 @@ ESP_STATUS CO_WriteSleep(IN INT Period) //sleep msec
 	SendCommand(buffer);
 	msleep(1);
 	status = GetResponse(buffer);
-	printf("%s: status=%d\n", __func__, status);
+	_DEBUG3 printf("%s: status=%d\n", __func__, status);
 	return status;
 }
 
@@ -77,13 +88,13 @@ ESP_STATUS CO_WriteReset(VOID) //no params
 	ESP_STATUS status = OK;
 	BYTE buffer[DATABUFSIZ];
 
-	printf("%s: ENTER\n", __func__);
+	_DEBUG2 printf("%s: ENTER\n", __func__);
 	SetCommand(CO_WR_RESET, buffer, 0);
 	SendCommand(buffer);
 	msleep(1);
 	//PacketDump(buffer);
 	status = GetResponse(buffer);
-	printf("%s: status=%d\n", __func__, status);
+	_DEBUG3 printf("%s: status=%d\n", __func__, status);
 	return status;
 }
 
@@ -93,18 +104,18 @@ ESP_STATUS CO_ReadVersion(OUT BYTE *VersionStr)
 	BYTE buffer[DATABUFSIZ];
 	BYTE *p = &buffer[6];
 
-	printf("%s: ENTER\n", __func__);
+	_DEBUG2 printf("%s: ENTER\n", __func__);
 	SetCommand(CO_RD_VERSION, buffer, 0);
 	SendCommand(buffer);
 	msleep(1);
 	status = GetResponse(buffer);
 	printf("%s: status=%d\n", __func__, status);
 	if (status == OK) {
-		printf("ver=%d.%d.%d.%d %d.%d.%d.%d id=%02X%02X%02X%02X\n",
+		_DEBUG printf("ver=%d.%d.%d.%d %d.%d.%d.%d id=%02X%02X%02X%02X\n",
 		       p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],
 		       p[8],p[9],p[10],p[11]);
 		p[32] = '\0';
-		printf("chip=%02X%02X%02X%02X App=<%s>\n",
+		_DEBUG printf("chip=%02X%02X%02X%02X App=<%s>\n",
 		       p[12],p[13],p[14],p[15],&p[16]);
 	}
 	return status;
@@ -116,7 +127,7 @@ ESP_STATUS CO_WriteFilterAdd(IN BYTE *Id) //add filter id
 	BYTE buffer[DATABUFSIZ];
 	BYTE param[6];
 
-	printf("%s: ENTER add=%02X%02X%02X%02X\n", __func__, Id[0], Id[1], Id[2], Id[3]);
+	_DEBUG printf("%s: ENTER add=%02X%02X%02X%02X\n", __func__, Id[0], Id[1], Id[2], Id[3]);
 	if (Id != NULL) {
 		param[0] = 0; // Device source ID
 		param[1] = Id[0];
@@ -129,7 +140,7 @@ ESP_STATUS CO_WriteFilterAdd(IN BYTE *Id) //add filter id
 		msleep(1);
 		status = GetResponse(buffer);
 	}
-	printf("%s: status=%d\n", __func__, status);
+	_DEBUG3 printf("%s: status=%d\n", __func__, status);
 	return status;
 }
 
@@ -138,12 +149,12 @@ ESP_STATUS CO_WriteFilterDel(IN BYTE *Id) //delete filter id
 	ESP_STATUS status = OK;
 	BYTE buffer[DATABUFSIZ];
 
-	printf("%s: ENTER del=%02X%02X%02X%02X\n", __func__, Id[0], Id[1], Id[2], Id[3]);
+	_DEBUG printf("%s: ENTER del=%02X%02X%02X%02X\n", __func__, Id[0], Id[1], Id[2], Id[3]);
 	SetCommand(CO_WR_FILTER_DEL, buffer, Id);
 	SendCommand(buffer);
 	msleep(1);
 	status = GetResponse(buffer);
-	printf("%s: status=%d\n", __func__, status);
+	_DEBUG3 printf("%s: status=%d\n", __func__, status);
 	return status;
 }
 
@@ -152,12 +163,12 @@ ESP_STATUS CO_WriteFilterDelAll(VOID) //no params
 	ESP_STATUS status = OK;
 	BYTE buffer[DATABUFSIZ];
 
-	printf("%s: ENTER\n", __func__);
+	_DEBUG printf("%s: ENTER\n", __func__);
 	SetCommand(CO_WR_FILTER_DEL_ALL, buffer, 0);
 	SendCommand(buffer);
 	msleep(1);
 	status = GetResponse(buffer);
-	printf("%s: status=%d\n", __func__, status);
+	_DEBUG3 printf("%s: status=%d\n", __func__, status);
 	return status;
 }
 
@@ -167,14 +178,14 @@ ESP_STATUS CO_WriteFilterEnable(IN BOOL On) //enable or disable
 	BYTE buffer[DATABUFSIZ];
 	BYTE param[2];
 
-	printf("%s: ENTER opt=%s\n", __func__, On ? "ON" : "OFF");
+	_DEBUG printf("%s: ENTER opt=%s\n", __func__, On ? "ON" : "OFF");
 	param[0] = (BYTE) On;  //enable(1) or disable(0)
 	param[1] = 0;  // OR condition
 	SetCommand(CO_WR_FILTER_ENABLE, buffer, param);
 	SendCommand(buffer);
 	msleep(1);
 	status = GetResponse(buffer);
-	printf("%s: status=%d\n", __func__, status);
+	_DEBUG3 printf("%s: status=%d\n", __func__, status);
 	return status;
 }
 
@@ -186,7 +197,7 @@ ESP_STATUS CO_ReadFilter(OUT INT *count, OUT BYTE *Ids)
 	INT i;
 	BYTE *p;
 	
-	printf("%s: ENTER\n", __func__);
+	_DEBUG printf("%s: ENTER\n", __func__);
 	SetCommand(CO_RD_FILTER, buffer, 0);
 	SendCommand(buffer);
 	msleep(1);
@@ -207,8 +218,8 @@ ESP_STATUS CO_ReadFilter(OUT INT *count, OUT BYTE *Ids)
 				*p++ = '\0'; 
 			}
 		}
-		printf("length=%d count=%d Id=%02X%02X%02X%02X\n",
-		       buffer[1], *count, Ids[0], Ids[1], Ids[2], Ids[3]);
+		_DEBUG printf("length=%d count=%d Id=%02X%02X%02X%02X\n",
+	       buffer[1], *count, Ids[0], Ids[1], Ids[2], Ids[3]);
 	}
 	return status;
 }
@@ -219,12 +230,12 @@ ESP_STATUS CO_WriteMode(IN INT Mode) //0:ERP1, 1:ERP2
 	BYTE buffer[DATABUFSIZ];
 	BYTE bMode = Mode;
 
-	printf("%s: ENTER\n", __func__);
+	_DEBUG printf("%s: ENTER\n", __func__);
 	SetCommand(CO_WR_MODE, buffer, &bMode);
 	SendCommand(buffer);
 	msleep(1);
 	status = GetResponse(buffer);
-	printf("%s: status=%d\n", __func__, status);
+	_DEBUG3 printf("%s: status=%d\n", __func__, status);
 	return status;
 }
 
@@ -234,12 +245,12 @@ ESP_STATUS CFG_WriteESP3Mode(IN INT Mode) //1:ERP1, 2:ERP2
 	BYTE buffer[DATABUFSIZ];
 	BYTE bMode = Mode;
 
-	printf("%s: ENTER\n", __func__);
+	_DEBUG printf("%s: ENTER\n", __func__);
 	SetCommand(CFG_WR_ESP3_MODE, buffer, &bMode);
 	SendCommand(buffer);
 	msleep(1);
 	status = GetResponse(buffer);
-	printf("%s: status=%d\n", __func__, status);
+	_DEBUG3 printf("%s: status=%d\n", __func__, status);
 	return status;
 }
 
@@ -249,12 +260,12 @@ ESP_STATUS CFG_ReadESP3Mode(OUT INT *Mode) //1:ERP1, 2:ERP2
 	BYTE buffer[DATABUFSIZ];
 	byte *p = &buffer[6];
 
-	printf("%s: ENTER\n", __func__);
+	_DEBUG printf("%s: ENTER\n", __func__);
 	SetCommand(CFG_RD_ESP3_MODE, buffer, 0);
 	SendCommand(buffer);
 	msleep(1);
 	status = GetResponse(buffer);
-	printf("%s: status=%d mode=%d\n", __func__, status, *p);
+	_DEBUG3 printf("%s: status=%d mode=%d\n", __func__, status, *p);
 	return status;
 }
 

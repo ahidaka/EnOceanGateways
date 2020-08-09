@@ -4,7 +4,7 @@ TARGET = dpride dppoint ptable testmain sample-broker eologfile websocketmain
 
 CC = gcc
 IFLAGS = -I/usr/include/libxml2
-CFLAGS = -g -Wall -Wno-parentheses -Wno-unused-function $(IFLAGS)
+CFLAGS = -g -Wall -Wno-parentheses -Wno-unused-function -Wno-format-overflow $(IFLAGS)
 
 DPOBJS = dpride.o ptable.o node.o control.o serial.o esp3.o logger.o websocket.o eologfile.o utils.o
 LIBDIR = ../eolib

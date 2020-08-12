@@ -30,12 +30,19 @@ VOID PacketDebug(INT flag)
 	_GetPacketDebug = flag;
 }
 
+INT _PacketAnalyze(BYTE *p, INT DumpOption);
+
 VOID PacketDump(BYTE *p)
 {
-	(VOID) PacketAnalyze(p);
+	(VOID) _PacketAnalyze(p, 1);
 }
 
 INT PacketAnalyze(BYTE *p)
+{
+	return _PacketAnalyze(p, 0);
+}
+
+INT _PacketAnalyze(BYTE *p, INT DumpOption)
 {
 	const INT headerLength = 5;
 	const INT erp1IdLength = 4;
@@ -183,7 +190,7 @@ INT PacketAnalyze(BYTE *p)
 		id[3] = p[headerLength + dataLength - 2];
 	}
 
-	if (_GetPacketDebug > 3) {
+	if (DumpOption > 0 || _GetPacketDebug > 3) {
 		printf("[%02X%02X%02X%02X:%d:%d:%02X] %02X %02X %02X %02X %02X|",
 			id[0], id[1], id[2], id[3], dataLength, optionalLength, rORG,
 			p[0], p[1], p[2], p[3], p[4]);

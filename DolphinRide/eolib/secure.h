@@ -32,6 +32,8 @@ INT SecGetRlc(SEC_HANDLE h, BYTE *Rlc);
 INT SecEncrypt(SEC_HANDLE h, BYTE *Data, INT Length, BYTE *Cypher);
 INT SecDecrypt(SEC_HANDLE h, BYTE *Packet, INT Length, BYTE *Data);
 
+VOID SecNoticeLevel(INT Level);
+
 //
 // Publickey supporting stuff
 // Security supporting stuff

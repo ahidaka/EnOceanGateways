@@ -570,6 +570,9 @@ void PrintKey(SECURE_REGISTER *ps)
 //
 //
 //
+INT SecNotice = 0;
+VOID SecNoticeLevel(INT Level) { SecNotice = Level; }
+
 #ifdef SUPERSONIC_SECURE
 #include "eoif.c"
 #else

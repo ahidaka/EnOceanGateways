@@ -16,7 +16,7 @@
 //#define EEP_DEBUG (1)
 //#define VLD_DEBUG (1)
 //#define CD_DEBUG (1)
-#define MODEL_DEBUG (1)
+//#define MODEL_DEBUG (1)
 
 extern void PrintProfileAll(void);
 extern NODE_TABLE NodeTable[];
@@ -368,7 +368,7 @@ int ReadModel(char *Filename)
 		if (pmc != NULL && pmc->Count > 0) {
 #ifdef MODEL_DEBUG
 			int i;
-			printf("####[%s] '%s' count=%d len=%d\n\n\n",
+			printf("####[%s] '%s' count=%d len=%d\n",
 				pmc->CmStr, pmc->Title, pmc->Count, length);
 			for(i = 0; i < pmc->Count; i++) {
 				DATAFIELD *pd = &pmc->Dtable[i];

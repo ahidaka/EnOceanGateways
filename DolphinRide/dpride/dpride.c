@@ -25,22 +25,23 @@
 #include "../eolib/secure.h"
 
 static const char copyright[] = "\n(c) 2017 Device Drivers, Ltd. \n";
-static const char version[] = "\n@ dpride Version 1.26 \n";
+static const char version[] = "\n@ dpride Version 1.27 \n";
 
 //#define ERP2_DEBUG (1)
 #define SECURE_DEBUG (1)
+#define QUEUE_DEBUG (1)
 //#define FILTER_DEBUG (1)
 //#define CMD_DEBUG (1)
 //#define CT_DEBUG (1)
 //#define SIG_DEBUG (1)
 //#define MSG_DEBUG (1)
-//#define RAW_INPUT (1) // RAW_INPUT Display for ERP2 DEBUG
+#define RAW_INPUT (1) // RAW_INPUT Display for ERP2 DEBUG
 
 //
 #define msleep(a) usleep((a) * 1000)
 
 #define MAINBUFSIZ (1024)
-#define DATABUFSIZ (256)
+#define DATABUFSIZ (528)
 #define HEADER_SIZE (5)
 #define CRC8D_SIZE (1)
 
@@ -64,21 +65,50 @@ static const char version[] = "\n@ dpride Version 1.26 \n";
 
 #define INCREMENT(a) ((a) = (((a)+1) & 0x7FFFFFFF))
 
+#define QueueSetLength(Buffer, Length) \
+	((QUEUE_ENTRY *)((Buffer) - offsetof(QUEUE_ENTRY, Data)))->Length = (Length)
+
+#define QueueGetLength(Buffer) \
+	(((QUEUE_ENTRY *)((Buffer) - offsetof(QUEUE_ENTRY, Data)))->Length)
+
 //typedef struct QueueHead {...} QEntry;
 STAILQ_HEAD(QueueHead, QEntry);
 typedef struct QueueHead QUEUE_HEAD;
 
 struct QEntry {
-        int Number;
-        struct timespec TimeStamp;
-        BYTE Data[DATABUFSIZ];
-        STAILQ_ENTRY(QEntry) Entries;
+	BYTE Data[DATABUFSIZ];
+	INT Number;
+	INT Length;
+	STAILQ_ENTRY(QEntry) Entries;
 };
 typedef struct QEntry QUEUE_ENTRY;
 
 QUEUE_HEAD DataQueue;     // Received Data
 QUEUE_HEAD ResponseQueue; // CO Command Responce
 QUEUE_HEAD ExtraQueue;    // Event, Smack, etc currently not used
+QUEUE_HEAD FreeQueue;     // Free buffer
+
+static const INT QueueCount = 8;
+static const INT QueueTryTimes = 10;
+//static const INT QueueTryTimes = 100;
+static const INT QueueTryWait = 2; //msec
+
+#ifdef QUEUE_DEBUG
+static UINT QFCount = 0; // Enq FreeQueue
+static UINT DFCount = 0; // Deq FreeQueue
+static UINT QDCount = 0; // Enq DataQueue
+static UINT DDCount = 0; // Deq DataQueue
+static UINT QRCount = 0; // Enq RespQueue
+static UINT DRCount = 0; // Deq RespQueue
+static UINT QECount = 0; // Enq ExtrQueue
+static UINT DECount = 0; // Deq ExtrQueue
+static UINT RDCount = 0; // QueueData
+static UINT MJCount = 0; // MainJob count
+
+static const UINT _QDebug = QUEUE_DEBUG;
+#define _QD if (_QDebug)  
+#define _QD2 if (_QDebug > 1)  
+#endif
 
 //
 //
@@ -239,24 +269,22 @@ bool MainJob(BYTE *Buffer);
 //
 //
 //
-int Enqueue(QUEUE_HEAD *Queue, BYTE *Buffer)
+INT Enqueue(QUEUE_HEAD *Queue, BYTE *Buffer)
 {
-	QUEUE_ENTRY *newEntry = NULL;
+	QUEUE_ENTRY *qEntry;
+	const size_t offset = offsetof(QUEUE_ENTRY, Data);
 
-	//printf("**Enqueue:%p\n", Buffer);
-	newEntry = (struct QEntry *) malloc(sizeof(struct QEntry));
-	if (newEntry == NULL) {
-		printf("**ERROR at Enqueue\n");
-		return 0;
-	}
+	_QD printf("**Enqueue:%p\n", Buffer);
+
+	qEntry = (QUEUE_ENTRY *)(Buffer - offset);
 
 	pthread_mutex_lock(&Queue->lock);
-	newEntry->Number = INCREMENT(Queue->num_control);
-	memcpy(newEntry->Data, Buffer, DATABUFSIZ);
+	qEntry->Number = INCREMENT(Queue->num_control);
 
-	STAILQ_INSERT_TAIL(Queue, newEntry, Entries);
+	STAILQ_INSERT_TAIL(Queue, qEntry, Entries);
 	pthread_mutex_unlock(&Queue->lock);
-	//printf("**Enqueue:%p=%d (%p)\n", newEntry->Data, newEntry->Number, newEntry);
+
+	_QD2 printf("**Dequeue list(%d):%p\n", qEntry->Number, Buffer);
 
 	return Queue->num_control;
 }
@@ -265,83 +293,131 @@ BYTE *Dequeue(QUEUE_HEAD *Queue)
 {
 	QUEUE_ENTRY *entry;
 	BYTE *buffer;
-	//int num;
+
+	//_QD printf("**Dequeue:\n");
 
 	if (STAILQ_EMPTY(Queue)) {
-		//printf("**Dequeue Empty!\n");
+		//printf("**Dequeue Empty=%s!\n", 
+		//	Queue == &DataQueue ? "Data" : "Free");
 		return NULL;
 	}
 	pthread_mutex_lock(&Queue->lock);
 	entry = STAILQ_FIRST(Queue);
 	buffer = entry->Data;
-	//num = entry->Number;
 	STAILQ_REMOVE(Queue, entry, QEntry, Entries);
 	pthread_mutex_unlock(&Queue->lock);
 
-	//printf("**Dequeue list(%d):%p\n", num, buffer);
+	_QD2 printf("**Dequeue list(%d):%p\n", entry->Number, buffer);
+
 	return buffer;
 }
 
-void StartJobs(CMD_PARAM *Param)
+VOID StartJobs(CMD_PARAM *Param)
 {
 	printf("**StartJobs\n");
 }
 
-void StopJobs()
+VOID StopJobs(VOID)
 {
 	printf("**StopJobs\n");
 }
 
-void Shutdown(CMD_PARAM *Param)
+VOID Shutdown(CMD_PARAM *Param)
 {
 	printf("**Shutdown\n");
 }
 
 //
-void QueueData(QUEUE_HEAD *Queue, BYTE *DataBuffer, int Length)
+VOID QueueData(QUEUE_HEAD *Queue, BYTE *DataBuffer, int Length)
 {
-	BYTE *queueBuffer;
-
 #ifdef SECURE_DEBUG
 	printf("+Q"); PacketDump(DataBuffer);
 #endif
-	queueBuffer = calloc(DATABUFSIZ, 1);
-	if (queueBuffer == NULL) {
-		fprintf(stderr, "calloc error\n");
-		return;
-	}
-	memcpy(queueBuffer, DataBuffer, Length);
-	Enqueue(Queue, queueBuffer);
+	_QD printf("**QueueData:%p %d %s\n", DataBuffer, QDCount, 
+		Queue == &DataQueue ? "Data" :
+		Queue == &ResponseQueue ? "Response" :
+		Queue == &ExtraQueue ? "Extra" : "Other");
+
+	QueueSetLength(DataBuffer, Length);
+	Enqueue(Queue, DataBuffer);
+
+	_QD QDCount++; //Enq Data Queue
 }
 
-void *ReadThread(void *arg)
+VOID FreeQueueInit(VOID)
 {
-	int fd = GetFd();
+	INT i;
+	struct QEntry *freeEntry;
+
+	for(i = 0; i < QueueCount; i++) {
+		freeEntry = (struct QEntry *) calloc(sizeof(struct QEntry), 1);
+		if (freeEntry == NULL) {
+			fprintf(stderr, "InitializeQueue: calloc error=%d\n", i);
+			return;
+		}
+		Enqueue(&FreeQueue, freeEntry->Data);
+
+		_QD QFCount++; // Enq FreeQueue
+	}
+}
+
+VOID QueueStatus(VOID)
+{
+	printf("\nQF=%d DF=%d QD=%d DD=%d QR=%d DR=%d QE=%d DE=%d RD=%d MJ=%d\n",
+		QFCount,
+		DFCount,
+		QDCount,
+		DDCount,
+		QRCount,
+		DRCount,
+		QECount,
+		DECount,
+		RDCount,
+		MJCount);
+}
+
+VOID *ReadThread(VOID *arg)
+{
+	INT fd = GetFd();
 	ESP_STATUS rType;
 	BYTE   *dataBuffer;
 	USHORT  dataLength = 0;
 	BYTE   optionLength = 0;
 	BYTE   packetType = 0;
-	int    totalLength;
+	INT    totalLength;
+	INT count = 0;
 
-	dataBuffer = malloc(DATABUFSIZ);
-	if (dataBuffer == NULL) {
-		fprintf(stderr, "malloc error at ReadThread\n");
-		return OK;
-	}
-	//printf("**ReadThread()\n");
+	_QD2 printf("**Start ReadThread()\n");
+
 	while(!stop_read) {
+		_QD printf("**ReadThread: %d\n", RDCount++);
+
+		do {
+			dataBuffer = Dequeue(&FreeQueue);
+			if (dataBuffer == NULL) {
+				if (QueueTryTimes >= count) {
+					fprintf(stderr, "FreeQueue empty at ReadThread\n");
+					QueueStatus();
+					return (void*) NULL;
+				}
+				count++;
+				msleep(QueueTryWait);
+			}
+		}
+		while(dataBuffer == NULL);
+		_QD DFCount++; // Deq FreeQueue
+
 		read_ready = TRUE;
 		rType = GetPacket(fd, dataBuffer, (USHORT) DATABUFSIZ);
 		if (stop_job) {
-			//printf("**ReadThread breaked by stop_job-1\n");
+			_QD2 printf("**ReadThread breaked by stop_job-1\n");
 			break;
 		}
 		else if (rType == OK) {
 			dataLength = (dataBuffer[0] << 8) + dataBuffer[1];
 			optionLength = dataBuffer[2];
 			packetType = dataBuffer[3];
-			totalLength = dataLength + optionLength + CRC8D_SIZE + 12; ////
+			totalLength = HEADER_SIZE + dataLength + optionLength + CRC8D_SIZE;
 #if RAW_INPUT
 			if (1) {
 				BYTE dataType = dataBuffer[5];
@@ -360,14 +436,16 @@ void *ReadThread(void *arg)
 			printf("**ReadThread breaked by stop_job-2\n");
 			break;
 		}
-		//printf("**ReadTh: process=%d\n", packetType);
+		printf("**ReadTh: process=%d\n", packetType);
 
 		switch (packetType) {
 		case RADIO_ERP1: //1  Radio telegram
 		case RADIO_ERP2: //0x0A ERP2 protocol radio telegram
+			_QD QDCount++;
 			QueueData(&DataQueue, dataBuffer, totalLength);
 			break;
 		case RESPONSE: //2 Response to any packet
+			_QD QRCount++;
 			QueueData(&ResponseQueue, dataBuffer, totalLength);
 			break;
 		case RADIO_SUB_TEL: //3 Radio subtelegram
@@ -378,48 +456,48 @@ void *ReadThread(void *arg)
 		case RADIO_MESSAGE: //9 Radio message
 		case CONFIG_COMMAND: //0x0B ESP3 configuration
 		default:
+			_QD QECount++;
 			QueueData(&ExtraQueue, dataBuffer, totalLength);
 			fprintf(stderr, "Unknown packet=%d\n", packetType);
 			break;
 		}
 	}
-	free(dataBuffer);
-	
+
 	//printf("ReadThread end=%d stop_read=%d\n", stop_job, stop_read);
 	return (void*) NULL;
 }
 
 //
-void *ActionThread(void *arg)
+VOID *ActionThread(void *arg)
 {
-	byte *data;
-	size_t offset;
-	QUEUE_ENTRY *qentry;
-	//BYTE buffer[DATABUFSIZ];
-	BYTE *buffer;
+	BYTE *data;
 
-	buffer = malloc(DATABUFSIZ);
-	if (buffer == NULL) {
-		fprintf(stderr, "malloc error at ReadThread\n");
-		return OK;
-	}
+	_QD printf("**ActionThread:\n");
 
 	while(!stop_action && !stop_job) {
 		data = Dequeue(&DataQueue);
-		if (data == NULL)
+		if (data == NULL) {
 			msleep(1);
+		}
 		else {
-			memcpy(buffer, data, DATABUFSIZ);
+			_QD DDCount++; // Deq DataQUeue
 
-			offset = offsetof(QUEUE_ENTRY, Data);
-			qentry = (QUEUE_ENTRY *)(data - offset);
-			free(qentry);
+			_QD MJCount++; // MainJob Count
+			MainJob(data);
 
-			MainJob(buffer);
+			Enqueue(&FreeQueue, data);
+			_QD QFCount++; // Enq FreeQueue
+		}
+		// Check for ExtraQueue
+		data = Dequeue(&ExtraQueue);
+		if (data != NULL) {
+			// Currently nothing to do
+			_QD DECount++;
+			Enqueue(&FreeQueue, data);
+			_QD QFCount++; // Enq FreeQueue
 		}
 	}
-	free(buffer);
-        return OK;
+    return OK;
 }
 
 BOOL InitSerial(OUT int *pFd)
@@ -485,32 +563,30 @@ ESP_STATUS GetResponse(OUT BYTE *Buffer)
 {
 	INT startMSec;
 	INT timeout;
+	INT length;
 	BYTE *data;
-	size_t offset;
-	QUEUE_ENTRY *qentry;
 	ESP_STATUS responseMessage;
 
 	startMSec = SystemMSec();
 	do {
 		data = Dequeue(&ResponseQueue);
-		timeout = SystemMSec() - startMSec;
 		if (data != NULL) {
-			//printf("**GetResponse() Got=%d\n", timeout);
-			memcpy(Buffer, data, DATABUFSIZ);
-			offset = offsetof(QUEUE_ENTRY, Data);
-			qentry = (QUEUE_ENTRY *)(data - offset);
-			//printf("**%s: free=%p\n", __func__, qentry);
-			free(qentry);
 			break;
 		}
-		if (timeout > RESPONSE_TIMEOUT)
-		{
+		timeout = SystemMSec() - startMSec;
+		if (timeout > RESPONSE_TIMEOUT) {
 			printf("****GetResponse() Timeout=%d\n", timeout);
 			return TIMEOUT;
 		}
 		msleep(1);
 	}
 	while(1);
+	_QD DRCount++;
+
+	length = QueueGetLength(data);
+	memcpy(Buffer, data, length);
+	Enqueue(&FreeQueue, data);
+	_QD QFCount++; // Enq FreeQueue
 
 	switch(Buffer[5]) {
 	case 0:
@@ -820,6 +896,7 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
 	p->ModelFile = strdup(modelFile);
 
 	PacketDebug(pFlags);
+	SecNoticeLevel(vFlags);
 	ESP_Debug(p->Debug);
 }
 
@@ -1428,11 +1505,14 @@ void WriteBridge(char *FileName, double ConvertedData, char *Unit)
 //
 void CleanUp(int Signum)
 {
-        EO_CONTROL *p = &EoControl;
+    EO_CONTROL *p = &EoControl;
 
 	if (p->PidPath) {
 		unlink(p->PidPath);
 	}
+
+	_QD QueueStatus();
+
 	exit(0);
 }
 
@@ -1794,10 +1874,11 @@ void PushPacket(BYTE *Buffer)
 				printf("SEC: declength=%d pb->Length=%d length=%d optionLength=%d\n",
 					decLength, pb->Length, length, optionLength);
 			}
+
 			// Currently we don't care RLC and CMAC
-			if (SecUpdate(sec) <= 0) {
-				Error("SecUpdate error");
-				return;
+			status = SecUpdate(sec);
+			if (p->Debug > 0 && status <= 0) {
+				printf("SecUpdate error=%d\n", status);
 			}
 #ifdef SECURE_DEBUG
 			(void) SecGetRlc(sec, nextRlc);
@@ -1839,7 +1920,10 @@ bool MainJob(BYTE *Buffer)
 	rOrg = Buffer[HEADER_SIZE];
 	idCount = -1;
 	
-	printf("*A"); PacketAnalyze(Buffer);
+	if (p->Debug > 1) {
+		printf("*A");
+	}
+	PacketAnalyze(Buffer);
 
 	if (p->Debug > 1) {
 		printf("*M"); PacketDump(Buffer);
@@ -2648,6 +2732,8 @@ int main(int ac, char **av)
 	STAILQ_INIT(&DataQueue);
 	STAILQ_INIT(&ResponseQueue);
 	STAILQ_INIT(&ExtraQueue);
+	STAILQ_INIT(&FreeQueue);
+	FreeQueueInit();	
 	pthread_mutex_init(&DataQueue.lock, NULL);
 	pthread_mutex_init(&ResponseQueue.lock, NULL);
 	pthread_mutex_init(&ExtraQueue.lock, NULL);

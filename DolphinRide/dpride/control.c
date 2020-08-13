@@ -11,7 +11,7 @@
 #include "ptable.h"
 #include "../eolib/models.h"
 
-#define EDX_DEBUG (1)
+//#define EDX_DEBUG (1)
 //#define CMD_DEBUG (1)
 //#define EEP_DEBUG (1)
 //#define VLD_DEBUG (1)

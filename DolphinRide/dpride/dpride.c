@@ -28,14 +28,14 @@ static const char copyright[] = "\n(c) 2017 Device Drivers, Ltd. \n";
 static const char version[] = "\n@ dpride Version 1.27 \n";
 
 //#define ERP2_DEBUG (1)
-#define SECURE_DEBUG (1)
-#define QUEUE_DEBUG (1)
+//#define SECURE_DEBUG (1)
+#define QUEUE_DEBUG (0)
 //#define FILTER_DEBUG (1)
 //#define CMD_DEBUG (1)
 //#define CT_DEBUG (1)
 //#define SIG_DEBUG (1)
 //#define MSG_DEBUG (1)
-#define RAW_INPUT (1) // RAW_INPUT Display for ERP2 DEBUG
+////#define RAW_INPUT (1) // RAW_INPUT Display for ERP2 DEBUG
 
 //
 #define msleep(a) usleep((a) * 1000)
@@ -93,7 +93,6 @@ static const INT QueueTryTimes = 10;
 //static const INT QueueTryTimes = 100;
 static const INT QueueTryWait = 2; //msec
 
-#ifdef QUEUE_DEBUG
 static UINT QFCount = 0; // Enq FreeQueue
 static UINT DFCount = 0; // Deq FreeQueue
 static UINT QDCount = 0; // Enq DataQueue
@@ -107,8 +106,7 @@ static UINT MJCount = 0; // MainJob count
 
 static const UINT _QDebug = QUEUE_DEBUG;
 #define _QD if (_QDebug)  
-#define _QD2 if (_QDebug > 1)  
-#endif
+#define _QD2 if (_QDebug > 1) 
 
 //
 //
@@ -174,7 +172,7 @@ typedef struct _CDM_BUFFER
 	INT CurrentLength; 
 	INT OptionLength;
 	BYTE *Buffer;
-	BYTE *EncBuffer;
+	BYTE *DecBuffer;
 }
 CDM_BUFFER;
 
@@ -1749,13 +1747,32 @@ void PushPacket(BYTE *Buffer)
 	}
 
 	if (p->Debug > 0) {
-		printf("CM %d-%d: rorg=%02X len=%d cur=%d opt=%d tot=%d this=%d\n",
+		printf("PP %d-%d: rorg=%02X len=%d cur=%d opt=%d tot=%d this=%d\n",
 		       seq, index, rOrg, length, pb->CurrentLength, pb->OptionLength, pb->Length, thisDataLength);
 	}
 
 	pb->CurrentLength += thisDataLength;
 	
 	if (pb->CurrentLength >= pb->Length) {
+		// Have to Push packet
+		BYTE   *dataBuffer;
+		INT    totalLength;
+		INT    count = 0;
+
+		do {
+			dataBuffer = Dequeue(&FreeQueue);
+			if (dataBuffer == NULL) {
+				if (QueueTryTimes >= count) {
+					fprintf(stderr, "FreeQueue empty at PushPacket(MainJob)\n");
+					QueueStatus();
+					return;
+				}
+				count++;
+				msleep(QueueTryWait);
+			}
+		}
+		while(dataBuffer == NULL);
+
 		//When Secure-Telegram, adjust encapslated R-Org length  
 		//pb->Length -= secureMark;
 		//The last packet, Make Header
@@ -1767,7 +1784,7 @@ void PushPacket(BYTE *Buffer)
 
 		if (p->Debug > 0) {
 			//Make Trailer
-			printf("CM %d-%d: thisLen=%d Queue=%d,%d opt=%d,%d\n", seq, index, thisDataLength,
+			printf("PP %d-%d: thisLen=%d Queue=%d,%d opt=%d,%d\n", seq, index, thisDataLength,
 			       pb->CurrentLength, pb->Length, optionLength, pb->OptionLength);
 		}
 
@@ -1790,16 +1807,20 @@ void PushPacket(BYTE *Buffer)
 			BYTE nextRlc[4];
 			printf("+P"); PacketDump(&pb->Buffer[0]);
 #endif
-			//memcpy(&pb->EncBuffer[0], &pb->Buffer[0], HEADER_SIZE + pb->Length + trailBytes + optionLength); 
+			//memcpy(&pb->DecBuffer[0], &pb->Buffer[0], HEADER_SIZE + pb->Length + trailBytes + optionLength); 
 
-			/* Need to make new Header to EncBuffer !!*/
-			pb->EncBuffer[0] = (HEADER_SIZE + pb->Length - 8) >> 8;
-			pb->EncBuffer[1] = (HEADER_SIZE + pb->Length - 8) & 0xFF;
-			pb->EncBuffer[2] = optionLength;
-			pb->EncBuffer[3] = 1; // Type: RADIO_ERP1
-			pb->EncBuffer[4] = 0; // CRC
-
-			memcpy(&pb->EncBuffer[HEADER_SIZE + pb->Length - 8], &Buffer[length], trailBytes + optionLength);
+			/* Need to make new Header to DecBuffer !!*/
+			pb->DecBuffer[0] = (HEADER_SIZE + pb->Length - 8) >> 8;
+			pb->DecBuffer[1] = (HEADER_SIZE + pb->Length - 8) & 0xFF;
+			pb->DecBuffer[2] = optionLength;
+			pb->DecBuffer[3] = 1; // Type: RADIO_ERP1
+			pb->DecBuffer[4] = 0; // CRC
+			if (p->Debug > 0) {
+				// Check needed!!!!
+				printf("PP: Push Len=%d OptLen=%d\n", HEADER_SIZE + pb->Length - 8, optionLength);
+				printf("PP: Copy &pb->DecBuffer[%d] << &Buffer[%d], len=%d\n", HEADER_SIZE + pb->Length - 8, length, trailBytes + optionLength);
+			}
+			memcpy(&pb->DecBuffer[HEADER_SIZE + pb->Length - 8], &Buffer[length], trailBytes + optionLength);
 			
 			ps = GetSecureRegister(secId);
 			if (ps == NULL) {
@@ -1818,7 +1839,6 @@ void PushPacket(BYTE *Buffer)
 					status = SecCheck(sec, pt->Rlc);
 
 					if (p->Debug > 1) {
-						//#ifdef SECURE_DEBUG
 						printf("SecCheck=%d, old=%02X%02X%02X%02X new=%02X%02X%02X%02X\n",
 						       status, rlc[0], rlc[1], rlc[2], rlc[3],
 						       pt->Rlc[0], pt->Rlc[1], pt->Rlc[2], pt->Rlc[3]);
@@ -1841,7 +1861,7 @@ void PushPacket(BYTE *Buffer)
 				printf("SEC: %08lX: HeadSz=%d Len=%d OLen=%d Tot=%d\n",
 				       secId, HEADER_SIZE, pb->Length, optionLength,
 				       HEADER_SIZE + pb->Length + optionLength);
-#endif				
+#endif
 				sec = SecCreate(ps->Rlc, ps->Key, ps->RlcLength);
 				if (sec == NULL) {
 					Error("SecCreate error");
@@ -1850,27 +1870,40 @@ void PushPacket(BYTE *Buffer)
 				ps->Sec = sec;
 			}
 #ifdef SECURE_DEBUG
-			printf("ORG:");
+			printf("ORG(%d):", pb->Length - 1);
 			for(i = 0; i < pb->Length - 1; i++) {
 				printf(" %02X", pb->Buffer[i + HEADER_SIZE]);
 			}
 			printf("\n");
 #endif
 			pb->Length -= 8; // Actual decrypt length (== declength?)
-			SecCheck(sec, &pb->Buffer[HEADER_SIZE + pb->Length]);
-			decLength = SecDecrypt(sec, &pb->Buffer[HEADER_SIZE], pb->Length, &pb->EncBuffer[HEADER_SIZE]);
 
-			length = pb->EncBuffer[0] << 8 | pb->EncBuffer[1];
-			optionLength = pb->EncBuffer[2];
-#ifdef SECURE_DEBUG
-			printf("DEC:");
-			for(i = 0; i < HEADER_SIZE + length + optionLength; i++) {
-				printf(" %02X", pb->EncBuffer[i]);
+			// Just in case, when some troubles happen...
+			if (pb->Length < 2 || pb->Length > 64) {
+				printf("####PP:Invalid Length=%d\n", pb->Length);
+				pb->Length = 4;
+				msleep(500);
 			}
-			printf("\n");
+			SecCheck(sec, &pb->Buffer[HEADER_SIZE + pb->Length]);
+			decLength = SecDecrypt(sec, &pb->Buffer[HEADER_SIZE], pb->Length, &pb->DecBuffer[HEADER_SIZE]);
+
+			length = pb->DecBuffer[0] << 8 | pb->DecBuffer[1];
+			optionLength = pb->DecBuffer[2];
+#ifdef SECURE_DEBUG
+			do {
+				INT totalLen = HEADER_SIZE + length + optionLength;
+				if (totalLen > 64) {
+					totalLen = 64;
+				}
+				printf("DEC(%d,%d):", HEADER_SIZE + length + optionLength, totalLen);
+				for(i = 0; i < totalLen; i++) {
+					printf(" %02X", pb->DecBuffer[i]);
+				}
+				printf("\n");
+			}
+			while(0);
 #endif
-			if (p->Debug > 1) {
-				//#ifdef SECURE_DEBUG
+			if (p->Debug > 0) {
 				printf("SEC: declength=%d pb->Length=%d length=%d optionLength=%d\n",
 					decLength, pb->Length, length, optionLength);
 			}
@@ -1884,11 +1917,14 @@ void PushPacket(BYTE *Buffer)
 			(void) SecGetRlc(sec, nextRlc);
 			printf("++nextRlc:%02X %02X %02X %02X\n", nextRlc[0], nextRlc[1], nextRlc[2], nextRlc[3]);
 #endif
-			QueueData(&DataQueue, pb->EncBuffer,  HEADER_SIZE + length + optionLength);
+			totalLength = HEADER_SIZE + length + optionLength;
+			memcpy(dataBuffer, pb->DecBuffer, totalLength);
 		}
 		else {
-			QueueData(&DataQueue, pb->Buffer, HEADER_SIZE + pb->Length + rOrgByte + optionLength);
+			totalLength = HEADER_SIZE + pb->Length + rOrgByte + optionLength;
+			memcpy(dataBuffer, pb->Buffer, totalLength);
 		}
+		QueueData(&DataQueue, dataBuffer, totalLength);
 	}
 }
 
@@ -1914,16 +1950,17 @@ bool MainJob(BYTE *Buffer)
 	extern void PrintProfileAll();
 	extern int GetTableIndex(UINT Id);
 
+	if (p->Debug > 1) {
+		printf("*A");
+	}
+	PacketAnalyze(Buffer); //Convert ERP2 to ERP1 when Register mode
+
 	dataLength = (int) (Buffer[0] << 8 | Buffer[1]);
 	optionLength = (int) Buffer[2];
 	packetType = (EO_PACKET_TYPE) Buffer[3];
 	rOrg = Buffer[HEADER_SIZE];
 	idCount = -1;
 	
-	if (p->Debug > 1) {
-		printf("*A");
-	}
-	PacketAnalyze(Buffer);
 
 	if (p->Debug > 1) {
 		printf("*M"); PacketDump(Buffer);
@@ -1980,7 +2017,6 @@ bool MainJob(BYTE *Buffer)
             SECURE_REGISTER *ps;
             ULONG secId = ByteToId(&id[0]);
             SEC_HANDLE sec;
-            INT status;
 			INT validLength;
             INT decLength;
 			INT cipherLength;
@@ -1988,7 +2024,7 @@ bool MainJob(BYTE *Buffer)
       	    INT i;
 			PUBLICKEY *pt;
 			BYTE rlc[MAX_RLC_SIZE];
-			BYTE encBuffer[DATABUFSIZ - 8 - HEADER_SIZE - 1];
+			BYTE decBuffer[DATABUFSIZ - 8 - HEADER_SIZE - 1];
 			const int cmacLength = 4; 
 #ifdef SECURE_DEBUG
 			BYTE nextRlc[4];
@@ -2067,7 +2103,7 @@ bool MainJob(BYTE *Buffer)
 				int i;
 				BYTE *px = &Buffer[0];
 
-				printf("SecCheck: valid=%d cipher=%d: ", validLength, cipherLength);
+				printf("SecCheck: valid=%d cipherLen=%d: ", validLength, cipherLength);
 				for(i = 0; i < validLength; i++) {
 					printf("%02X ", px[i]);
 				}
@@ -2085,9 +2121,17 @@ bool MainJob(BYTE *Buffer)
 				INT dataStart = 0;
 				BYTE newOrg = 0;
 
+				///////////////////////////////
+				if (cipherLength < 2 || cipherLength > 64) {
+					printf("####MJ:Invalid cipherLength=%d\n", cipherLength);
+					cipherLength = 2;
+					msleep(500);
+				}
+				///////////////////////////////
+
 				(void) SecCheck(sec, &Buffer[validLength]);
 				decLength = SecDecrypt(sec, &Buffer[HEADER_SIZE + 1],
-					cipherLength, &encBuffer[0]);
+					cipherLength, &decBuffer[0]);
 
 				if (rOrg == 0x30 && nt != NULL && nt->Eep[0] != '\0') {
 					dataStart = 1;
@@ -2099,7 +2143,7 @@ bool MainJob(BYTE *Buffer)
 					Buffer[HEADER_SIZE] = newOrg;
 				}
 				for(i = 0; i < cipherLength; i++) {
-					Buffer[HEADER_SIZE + dataStart + i] = encBuffer[i];
+					Buffer[HEADER_SIZE + dataStart + i] = decBuffer[i];
 				}
 				// update new length = old length -1, and replace data
 
@@ -2164,9 +2208,9 @@ bool MainJob(BYTE *Buffer)
 					rOrg, teachIn ? "T" : "", decLength, dataLength);
 			}
 			// Currently we don't care RLC and CMAC
-			if (SecUpdate(sec) <= 0) {
-				Error("SecUpdate error");
-				break;
+			status = SecUpdate(sec);
+			if (p->Debug > 0 && status <= 0) {
+				printf("SecUpdate error=%d\n", status);
 			}
 #ifdef SECURE_DEBUG
 			(void) SecGetRlc(sec, nextRlc);
@@ -2821,8 +2865,8 @@ int main(int ac, char **av)
 
 	for(i = 0; i < CDM_TABLE_SIZE; i++) {
 		CdmBuffer[i].Buffer = malloc(CDM_BUFFER_SIZE);
-		CdmBuffer[i].EncBuffer = malloc(CDM_BUFFER_SIZE);
-		if (CdmBuffer[i].Buffer == NULL || CdmBuffer[i].EncBuffer == NULL) {
+		CdmBuffer[i].DecBuffer = malloc(CDM_BUFFER_SIZE);
+		if (CdmBuffer[i].Buffer == NULL || CdmBuffer[i].DecBuffer == NULL) {
 			Error("malloc CdmBuffer(s)");
 			CleanUp(0);
 			exit(EXIT_FAILURE);

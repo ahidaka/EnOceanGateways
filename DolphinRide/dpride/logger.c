@@ -154,7 +154,7 @@ int MonitorMessage(char *message)
 			wsMakeFrame((const uint8_t *) message, length,
 				    data->gBuffer, &data->bufferSize, WS_TEXT_FRAME);
 			data->gBuffer[data->bufferSize] = '\0';
-			PRINTF("%s:%d sz=%ld <%s>\n",
+			PRINTF("%s:%d sz=%u <%s>\n",
 			       inet_ntoa(data->clientAddr.sin_addr), ntohs(data->clientAddr.sin_port),
 			       data->bufferSize, (char *) &data->gBuffer[2]);
 			// then go
@@ -171,7 +171,7 @@ int safeSend(WEBSOCKET_PARAM *param, const uint8_t *buffer, size_t bufferSize)
         int try = 0;
 	int written;
         int result = EXIT_SUCCESS;
-        PRINTF("Enter socnt=%d bs=%ld %s:%d\n", sock_count, bufferSize,
+        PRINTF("Enter socnt=%d bs=%d %s:%d\n", sock_count, bufferSize,
                 inet_ntoa(param->clientAddr.sin_addr), ntohs(param->clientAddr.sin_port));
 #ifdef PACKET_DUMP
 	PRINTF("out packet [\n");
@@ -244,7 +244,7 @@ void *clientWorker(void *param)
         if (state == WS_STATE_OPENING) {
 			ssize_t readed = recv(ths->clientSocket, ths->gBuffer+readedLength, BUF_LEN-readedLength, MSG_DONTWAIT);
 			if((readed == -EAGAIN) || (readed == -EWOULDBLOCK)){
-				PRINTF("**readed = %ld\n",readed);
+				PRINTF("**readed = %d\n",readed);
 				perror("recv failed");
 				break;
 			} else if(readed <= 0) {
@@ -368,8 +368,14 @@ void *clientWorker(void *param)
 
 	close(ths->clientSocket);
 	free(ths->gBuffer);
+
+	PRINTF("&&&New FreeB:%p\n", ths->gBuffer);
+
 	list_del(&ths->list);
 	free(ths);
+
+	PRINTF("&&&New FreeP:%p\n", ths);
+
 	pthread_exit(NULL);
 	return NULL;
 }
@@ -416,9 +422,11 @@ void *MonitorMain(void *Message)
 		       inet_ntoa(remote.sin_addr), ntohs(remote.sin_port));
 		// list
 		sock = (WEBSOCKET_PARAM *)malloc(sizeof(WEBSOCKET_PARAM));
+		PRINTF("&&&New AllocP:%p %d\n", sock, sizeof(WEBSOCKET_PARAM));
 		sock->count = &sock_count;
 		sock->clientSocket = clientSocket;
 		sock->gBuffer = (uint8_t *)malloc(BUF_LEN);
+		PRINTF("&&&New AllocB:%p %d\n", sock->gBuffer, BUF_LEN);
 		memcpy(&sock->clientAddr,&remote,sizeof(remote));
 		pthread_mutex_init(&sock->ws_mutex, NULL);
 		pthread_mutex_init(&sock->dataLock, NULL);

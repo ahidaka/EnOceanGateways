@@ -54,6 +54,7 @@ typedef struct _eo_control
         int AFlags;
         int CFlags;
         int VFlags;
+        int QuietMode;
         int Logger;
         int LocalLog;
         int Timeout;

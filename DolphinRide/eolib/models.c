@@ -10,15 +10,15 @@
 #include "../dpride/utils.h"
 #include "models.h"
 
-//#define MODEL_DEBUG (1)
+#define MODEL_DEBUG (1)
 
 #ifndef ENGINEERING_FACT
 #include "common-model.c"
 #else
-void CmPrintTI(BYTE *Buf, BYTE *Eepbuf, BYTE *Data, INT len) {}
-void CmPrintTR(BYTE *Buf, BYTE *Data, INT len) {}
-void CmPrintCD(BYTE *Buf, BYTE *Data, INT len) {}
-void CmPrintSD(BYTE *Buf, BYTE *Data, INT len) {}
+void CmPrintTI(OUT BYTE *Buf, OUT BYTE *Eepbuf, IN BYTE *Data, IN INT len) {}
+void CmPrintTR(OUT BYTE *Buf, IN BYTE *Data, IN INT len) {}
+void CmPrintCD(OUT BYTE *Buf, IN BYTE *Data, IN INT len) {}
+void CmPrintSD(OUT BYTE *Buf, IN BYTE *Data, IN INT len) {}
 
 INT CmFpSearch(IN CM_TABLE *pmc, IN BYTE *Buf, IN INT Size)
 {
@@ -60,26 +60,26 @@ static int count = 0;
 
 void print(ULONG ul)
 {
-        printf("%d: %08lX\n", count++, ul);
+    printf("%d: %08lX\n", count++, ul);
 }
 #endif
 
 INT CmTextToBin(IN char *src, IN BYTE *dst)
 {
-        int i;
-        int length = 0;
-        ULONG ul;
+	int i;
+	int length = 0;
+	ULONG ul;
 
-        for(i = 0; i < BUFSIZ / 2; i++) {
-                ul = strtoul((const char *) src, &src, 16);
-                *dst++ = (BYTE) ul & 0xFF;
-                length++;
-                if (*src == ' ') {
-                        src++;
-                }
-                else break;
-        }
-        return length;
+	for(i = 0; i < BUFSIZ / 2; i++) {
+		ul = strtoul((const char *) src, &src, 16);
+		*dst++ = (BYTE) ul & 0xFF;
+		length++;
+		if (*src == ' ') {
+				src++;
+		}
+		else break;
+	}
+	return length;
 }
 
 char *CmBinToText(IN BYTE *src, IN INT Length)
@@ -93,10 +93,10 @@ char *CmBinToText(IN BYTE *src, IN INT Length)
 	while(--Length >= 0) {
 		len = sprintf(out, "%02X ", *src++);
 		out += len;
-        }
+	}
 	*out++ = '\n';
 	*out = '\0';
-        return mem;
+	return mem;
 }
 
 //
@@ -106,32 +106,32 @@ char *CmBinToText(IN BYTE *src, IN INT Length)
 // not used
 static UNIT *DfUnitTable(DATAFIELD *pd, INT Count)
 {
-        int i;
-        UNIT *calcUnit = calloc(Count, sizeof(UNIT));
-        UNIT *pu = &calcUnit[0];
+	int i;
+	UNIT *calcUnit = calloc(Count, sizeof(UNIT));
+	UNIT *pu = &calcUnit[0];
 
-        if (calcUnit == NULL) {
-                fprintf(stderr, "calloc calcunit error\n");
-                return NULL;
-        }
+	if (calcUnit == NULL) {
+		fprintf(stderr, "calloc calcunit error\n");
+		return NULL;
+	}
 
-        for(i = 0; i < Count; i++) {
-                if (pd->ShortCut == NULL) {
-                        return calcUnit;
-                }
-                //printf("*%s: %d=%s,%s pu:%p\n", __FUNCTION__, i, pd->ShortCut, pd->DataName, pu);
+	for(i = 0; i < Count; i++) {
+		if (pd->ShortCut == NULL) {
+			return calcUnit;
+		}
+		//printf("*%s: %d=%s,%s pu:%p\n", __FUNCTION__, i, pd->ShortCut, pd->DataName, pu);
 
-                pu->ValueType = pd->ValueType;
+		pu->ValueType = pd->ValueType;
 		pu->SCut = pd->ShortCut;
-                pu->DName = pd->DataName;
-                pu->FromBit = pd->BitOffs;
-                pu->SizeBit = pd->BitSize;
-                pu->Unit = pd->Unit;
-                pu->Slope = CalcA(pd->RangeMin, pd->ScaleMin, pd->RangeMax, pd->ScaleMax);
-                pu->Offset = CalcB(pd->RangeMin, pd->ScaleMin, pd->RangeMax, pd->ScaleMax);
-                pu++, pd++;
-        }
-        return calcUnit;
+		pu->DName = pd->DataName;
+		pu->FromBit = pd->BitOffs;
+		pu->SizeBit = pd->BitSize;
+		pu->Unit = pd->Unit;
+		pu->Slope = CalcA(pd->RangeMin, pd->ScaleMin, pd->RangeMax, pd->ScaleMax);
+		pu->Offset = CalcB(pd->RangeMin, pd->ScaleMin, pd->RangeMax, pd->ScaleMax);
+		pu++, pd++;
+	}
+	return calcUnit;
 }
 #endif
 
@@ -141,7 +141,7 @@ static UNIT *DfUnitTable(DATAFIELD *pd, INT Count)
 CM_TABLE *CmGetCache(char *Cms)
 {
 	extern CM_TABLE ModelCache[];
-        CM_TABLE *pmc;
+	CM_TABLE *pmc;
 
 	pmc = &ModelCache[0];
 	while(pmc->CmHandle) {
@@ -155,9 +155,9 @@ CM_TABLE *CmGetCache(char *Cms)
 
 INT CmCleanUp(void)
 {
-        extern int CacheIndex;
+	extern int CacheIndex;
 	extern CM_TABLE ModelCache[];
-        CM_TABLE *pmc;
+	CM_TABLE *pmc;
 	DATAFIELD *pd;
 	int i, j;
 
@@ -197,80 +197,95 @@ INT CmCleanUp(void)
 //
 CM_TABLE *CmGetModel(BYTE *Buf, INT Size)
 {
-        extern int CacheIndex;
-        extern CM_TABLE ModelCache[];
-        INT index;
-        CM_TABLE *pmc;
-        CM_TABLE *ptmp;
-        INT fpSize;
-        VOID *modelHandle;
+	extern int CacheIndex;
+	extern CM_TABLE ModelCache[];
+	INT index;
+	CM_TABLE *pmc;
+	CM_TABLE *ptmp;
+	INT fpSize;
+	VOID *modelHandle;
 	char *baseName;
 	BOOL matched;
 	char tempName[CM_STRSIZE];
-        int i;
+    int i;
 
 #if MODEL_DEBUG
 	printf("##MD: Enter CmGetModel Size=%d CI=%d\n", Size, CacheIndex);
 #endif
-        index = CmFpSearch(&ModelCache[0], Buf, Size);
-        if (index < 0) {
-                // new fingerprint for new model
-                //printf("** New fingerprint for new model\n");
-                modelHandle = CmAnalyze(Buf, Size, &fpSize);
-                if (modelHandle == NULL) {
-                        fprintf(stderr, "##Analyze failed\n");
-                        return NULL;
-                }
+	index = CmFpSearch(&ModelCache[0], Buf, Size);
 
-                if (CacheIndex == CM_CACHE_SIZE) {
-                        fprintf(stderr, "##CACHE size overflow=%d\n", CacheIndex);
-                        return NULL;
-                }
-                pmc = &ModelCache[CacheIndex++];
-                pmc->CmHandle = modelHandle;
+	if (index < 0) {
+		// new fingerprint for new model
+		//printf("** New fingerprint for new model\n");
+		modelHandle = CmAnalyze(Buf, Size, &fpSize);
+		if (modelHandle == NULL) {
+			fprintf(stderr, "##Analyze failed\n");
+			return NULL;
+		}
+
+		if (CacheIndex == CM_CACHE_SIZE) {
+			fprintf(stderr, "##CACHE size overflow=%d\n", CacheIndex);
+			return NULL;
+		}
+		pmc = &ModelCache[CacheIndex++];
+		pmc->CmHandle = modelHandle;
+
+#if MODEL_DEBUG
+	printf("##MD: Cached[%d]:%d<%s><%s>\n", CacheIndex - 1, pmc->Count, pmc->Title, pmc->CmStr);
+#endif
 		baseName = CmMakeString(modelHandle);
 
-		for(i = 1; i < 999; i++) {
+		for(i = 1; i < 1000; i++) {
 			sprintf(tempName, "%s-%d", baseName, i);
+#if MODEL_DEBUG
+			printf("##MD <%s> %d<%s>\n", baseName, i, tempName);
+#endif
 			ptmp = &ModelCache[0];
 			matched = FALSE;
-#if MODEL_DEBUG
-			printf("##MD: %d:old CmStr=%s\n", i, pmc->CmStr);
-#endif
 			while(ptmp != NULL && ptmp->CmStr != NULL) {
 				if (!strcmp(tempName, ptmp->CmStr)) {
 					// Is mached existing name?
 					matched = TRUE;
+#if MODEL_DEBUG
+					printf("##MD: %d:matched,old CmStr=%s, Cand=%s\n", i, ptmp->CmStr, tempName);
+#endif
 					break;
 				}
 				ptmp++;
 			}
-			if (!matched)
+			if (!matched) {
+#if MODEL_DEBUG
+				printf("##MD: %d:!matched,old CmStr=%s, Cand=%s\n", i, ptmp->CmStr, tempName);
+#endif
 				break;
+			}
 		}
 #if MODEL_DEBUG
-		printf("##MD: new CmStr=%s\n", pmc->CmStr);
+		printf("##MD: new CmStr=%s\n", tempName);
 #endif
-                pmc->CmStr = strdup(tempName);
+		pmc->CmStr = strdup(tempName);
 		pmc->Title = CmMakeTitle(modelHandle);
-                pmc->Count = fpSize;
+		pmc->Count = fpSize;
 		pmc->Dtable = CmMakeDataField(modelHandle);
-		////////
+
 #if MODEL_DEBUG
+		////////
 		for(i = 0; i < fpSize; i++) {
 			printf("**CmGetModel: %d:%d %s=%s\n", i, (pmc->Dtable+i)->ValueType,
-			       (pmc->Dtable+i)->ShortCut, (pmc->Dtable+i)->DataName);
+				(pmc->Dtable+i)->ShortCut, (pmc->Dtable+i)->DataName);
 		}
-#endif
 		////////
-        }
-        else {
-                pmc = &ModelCache[index];
-                //printf("** Matched fingerprint for index %d\n", index);
-        }
-        //printf("** Fingerprint [%s] '%s'\n", pmc->CmStr, pmc->Title);
+#endif
+	}
+	else {
+		pmc = &ModelCache[index];
+#if MODEL_DEBUG
+		printf("** Matched fingerprint for index %d\n", index);
+#endif
+	}
+	//printf("** Fingerprint [%s] '%s'\n", pmc->CmStr, pmc->Title);
 
-        return pmc;
+	return pmc;
 }
 
 //
@@ -309,8 +324,21 @@ int main(int ac, char *av[])
 
 		pmc = CmGetModel((BYTE *)binArray, length);
 		if (pmc != NULL) {
-			printf("[%s] '%s' count=%d len=%d\n\n\n",
+			printf("[%s] '%s' count=%d len=%d\n",
 			       pmc->CmStr, pmc->Title, pmc->Count, length);
+#if MODEL_DEBUG
+			DecodeDebug(pmc->CmHandle);
+			do {
+				BYTE eep[48];
+
+				DecodeShort(eep, pmc->CmHandle);
+				printf("DecodeShort<%s>\n\n", eep);
+
+				CmPrintTI((BYTE*)buf, eep, binArray, length);
+				printf("CmPrintTI<%s>\n\n", buf);
+			}
+			while(0);
+#endif
 		}
 		else {
 			printf("CmGetModel error!\n");

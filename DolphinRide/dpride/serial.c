@@ -16,6 +16,18 @@ static INT _GetPacketDebug = 0;
 #define _DEBUG if (_GetPacketDebug > 2)     // -ppp: _PD_VERBOSE
 #define _DEBUG2 if (_GetPacketDebug > 3)    // -pppp: _PD_NOISY
 #define _DEBUG3 if (_GetPacketDebug > 4)    // -ppppp: _PD_SUPER_NOISY
+#define _DEBUG0 if (_GetPacketDebug > 2)    // //NOT WORKED
+
+VOID DumpIt(BYTE *Start, BYTE *p)
+{
+	INT i;
+
+	printf("DumpIt: offset=%u\n", p - Start);
+	for(i = 0; i < 10; i++) {
+		printf("%02X ", p[i]);
+	}
+	printf("\n");
+}
 
 //
 // _GetPacketDebug
@@ -30,43 +42,52 @@ VOID PacketDebug(INT flag)
 	_GetPacketDebug = flag;
 }
 
-INT _PacketAnalyze(BYTE *p, INT DumpOption);
+INT _PacketAnalyze(BYTE *p, INT DumpOption, INT ConvertOption);
 
 VOID PacketDump(BYTE *p)
 {
-	(VOID) _PacketAnalyze(p, 1);
+	INT dumpOption = _GetPacketDebug;
+	_DEBUG3 printf("*** PacketDump=%02X\n", _GetPacketDebug);
+
+	if (dumpOption == 0)
+		dumpOption = 1;
+	(VOID) _PacketAnalyze(p, dumpOption, 0);
 }
 
 INT PacketAnalyze(BYTE *p)
 {
-	return _PacketAnalyze(p, 0);
+	return _PacketAnalyze(p, _GetPacketDebug, 1);
 }
 
-INT _PacketAnalyze(BYTE *p, INT DumpOption)
+INT _PacketAnalyze(BYTE *Packet, INT DumpOption, INT ConvertOption)
 {
 	const INT headerLength = 5;
 	const INT erp1IdLength = 4;
 	const INT idSize = 8;
-	INT dataLength = p[0] << 8 | p[1];
-	INT optionalLength = p[2];
+	INT dataLength = Packet[0] << 8 | Packet[1];
+	INT optionalLength = Packet[2];
 	INT printLength = headerLength + dataLength + optionalLength;
 	INT packetType = 0;
 	INT telegramType = 0;
+	INT extendedHeader = 0;
 	INT extendedTelegramType = 0;
 	INT addressControl = 0;
 	INT originatorLength;
+	INT destinationLength = 0;
+	INT idIndex;
 	INT rORG = 0;
 	INT i;
 	BOOL isERP2 = FALSE;
+	BOOL extendedHeaderAvailable = FALSE;
 	BOOL extendedTelegramTypeAvailable = FALSE;
 	//BOOL converToERP2 = FALSE;
-	BYTE *pPacket = p;
-	BYTE *data = &p[headerLength];
+	BYTE *data = &Packet[headerLength];
 	BYTE id[idSize];
+	BYTE destId[idSize];
 	const BYTE ExtendedTelegramTypes[8] = {
 		0xC5, // 0:SYS_EX
 		0xC6, // 1:SmackReq
-		0xC7, // 2:SmackAns 
+		0xC7, // 2:SmackAns
 		0x40, // 3:Chained Data
 		0x32, // 4:Secure
 		0xB0, // 5:GP_TI
@@ -74,7 +95,7 @@ INT _PacketAnalyze(BYTE *p, INT DumpOption)
 		0xB2, // 7:GP_CD 
 	};
 
-	_DEBUG3 printf("**** _GetPacketDebug=%08X\n", _GetPacketDebug);
+	_DEBUG3 printf("*** _PacketAnalyze=%02X\n", _GetPacketDebug);
 
 	for(i = 0; i < idSize; i++) {
 		id[i] = 0;
@@ -84,31 +105,24 @@ INT _PacketAnalyze(BYTE *p, INT DumpOption)
 		if (printLength > 16)
 			printLength = 16;
 	}
-	//if ((_GetPacketDebug & _PD_EXOPTION) != 0) {
-	//	converToERP2 = TRUE;
-	//}
-	packetType = p[3];
-	telegramType = data[0];
-	extendedTelegramType = data[1];
 
-	if (packetType == 0x0A) {
-		isERP2 = TRUE;
-	}
-
-	if (isERP2) {
+	packetType = Packet[3];
+	if (isERP2 = packetType == 0x0A) {
+		telegramType = *data++;
 		addressControl = telegramType >> 5;
 		switch(addressControl) {
 		case 0:
-			originatorLength = 3; //
+			originatorLength = 3;
 			break;
 		case 1:
-			originatorLength = 4; //
+			originatorLength = 4;
 			break;
 		case 2:
-			originatorLength = 4; //
+			originatorLength = 4;
+			destinationLength = 4;
 			break;
 		case 3:
-			originatorLength = 6; //
+			originatorLength = 6;
 			break;
 		case 4:
 		case 5:
@@ -117,6 +131,10 @@ INT _PacketAnalyze(BYTE *p, INT DumpOption)
 		default:
 			originatorLength = 0; // means error
 			break;
+		}
+
+		if (extendedHeaderAvailable = (telegramType >> 4) & 0x01) {
+			extendedHeader = *data++;
 		}
 
 		switch(telegramType & 0xF) {
@@ -133,7 +151,7 @@ INT _PacketAnalyze(BYTE *p, INT DumpOption)
 			rORG = 0xD0; //Smack
 			break;
 		case 4:
-			rORG = 0xD2; // VLD
+			rORG = 0xD2; //VLD
 			break;
 		case 5:
 			rORG = 0xD4; //UTE
@@ -153,14 +171,16 @@ INT _PacketAnalyze(BYTE *p, INT DumpOption)
 		case 0xA:
 			rORG = 0xB3; //GP_SEL
 			break;
+		case 0xB:
+			rORG = 0xA8; //ACK
+			break;
 		case 0xF:
 			extendedTelegramTypeAvailable = TRUE;
-			rORG = ((extendedTelegramType & 0xF0) == 0x30) // is Secure ?
+			extendedTelegramType = *data++;
+			rORG = ((extendedTelegramType & 0xF8) != 0x00) // has original type ?
 				? extendedTelegramType
 				: ExtendedTelegramTypes[extendedTelegramType & 0x7];
-			_DEBUG printf("A:%2X %2X %2X\n", telegramType, extendedTelegramType, rORG);
 			break;
-		case 0xB:
 		case 0xC:
 		case 0xD:
 		case 0xE:
@@ -169,109 +189,109 @@ INT _PacketAnalyze(BYTE *p, INT DumpOption)
 			break;
 		}
 
-		if (extendedTelegramTypeAvailable) {
-			data++;
+		// originatorLength is 3, 4, 6,... convet them to 32bit ID
+		for(i = 0; i < erp1IdLength; i++) {
+			idIndex = originatorLength - (erp1IdLength - i);
+			id[i] = idIndex < 0 ? 0 : data[idIndex];
 		}
-		for(i = 0; i < originatorLength; i++) {
-			id[i] = data[i + 1];
-		}
-		if (originatorLength > erp1IdLength) {
-			// Truncate leading 2 bytes
-			for(i = 0; i < erp1IdLength; i++) {
-				id[i] = id[i + 2];
-			}			
-		}
+		data += originatorLength;
+		*((UINT *)&destId[0]) = 0UL;
+		for (i = 0; i < destinationLength; i++) {
+			destId[i] = data[i];
+		} 
+		data += destinationLength;
 	}
 	else { //ERP1
 		rORG = data[0];
-		id[0] = p[headerLength + dataLength - 5]; 
-		id[1] = p[headerLength + dataLength - 4];
-		id[2] = p[headerLength + dataLength - 3];
-		id[3] = p[headerLength + dataLength - 2];
+		for(i = 0; i < erp1IdLength; i ++) {
+			id[i] = data[dataLength + 1 + i];
+		}
+		data++;
 	}
+	_DEBUG2 printf("** Analyze:INPUT is ERP%s\n", isERP2 ? "2" : "1");
 
 	if (DumpOption > 0 || _GetPacketDebug > 3) {
+		BYTE *p;
+		BOOL completed = FALSE;
+		// Print raw packet data
+		// Header and basic information
 		printf("[%02X%02X%02X%02X:%d:%d:%02X] %02X %02X %02X %02X %02X|",
 			id[0], id[1], id[2], id[3], dataLength, optionalLength, rORG,
-			p[0], p[1], p[2], p[3], p[4]);
+			Packet[0], Packet[1], Packet[2], Packet[3], Packet[4]);
 
-		p += headerLength;
+		p = Packet + headerLength;
 		for(i = 0; i < dataLength; i++) {
-			if (i + headerLength >= printLength)
+			if (i + headerLength >= printLength) {
+				completed = TRUE;
 				break;
+			}
 			printf("%02X ", *p++);
-			if (i % 8 == 7)
-				printf(" ");
 		}
-		printf("|");
-		for(i = 0; i < optionalLength; i++) {
-			if (i + headerLength + dataLength >= printLength)
-				break;
-			printf("%02X ", *p++);
-			if (i % 8 == 7)
-				printf(" ");
+		if (!completed) {
+			printf("|");
+			for(i = 0; i < optionalLength; i++) {
+				if (i + headerLength + dataLength >= printLength)
+					break;
+				printf("%02X ", *p++);
+			}
 		}
 		printf("\n");
+
+		if (isERP2) {
+			printf("ERP2 Extra: TTyp:%02X rOrg:%02X sLen:%d dLen:%d ",
+				telegramType, rORG, originatorLength, destinationLength);
+			if (extendedHeaderAvailable) {
+				printf("exHD:%02X ", extendedHeader);
+			}
+			if (extendedTelegramTypeAvailable) {
+				printf("exTT:%02X ", extendedTelegramType);
+			}
+			if (destinationLength > 0) {
+				printf("dID:%02X%02X%02X%02X ",
+					destId[0], destId[1], destId[2], destId[3]);
+			}
+			printf("\n");
+		}
 	}
 
-	if (isERP2) {
-		BYTE converted[128];
-		INT lastDataPos;
-		INT optStart = dataLength; //for debug
-		BYTE status;
+	if (isERP2 && ConvertOption) {
+		// Have to convert to ERP1
+		BYTE converted[528];
+		BYTE dBm = Packet[dataLength];
+		BYTE secLevel = Packet[dataLength + 1];
 
-		// debug, will be deleted...
-		//for(i = 0; i < 128; i++) {
-		//	converted[i] = 0;
-		//}
-		_DEBUG printf("***ERP2Convert: rOrg=[%02X %02X]->%02X new dLen=%d oLen=%d\n",
+		dataLength -= (extendedHeaderAvailable + extendedTelegramTypeAvailable
+						+ originatorLength + destinationLength );
+		optionalLength += (erp1IdLength + 1);  //ToID_ERP1(4)+Subtel(1)
+
+		_DEBUG printf("ERP2Convert: rOrg=[%02X %02X]->%02X new dLen=%d oLen=%d\n",
 			telegramType, extendedTelegramType, rORG, dataLength, optionalLength);
 
-		p = pPacket;
-		dataLength -= originatorLength;
-		dataLength += erp1IdLength;
-		if (extendedTelegramTypeAvailable) {
-			dataLength--;
-		}
+		_DEBUG0 DumpIt(Packet, data);	
 
-		// Header
+		// New ERP1 Header
 		converted[0] = dataLength >> 8;
 		converted[1] = dataLength & 0xFF;
-		optionalLength += 5; //ToID_ERP1(4)+Subtel(1)
 		converted[2] = optionalLength;
 		converted[3] = 0x01; //RADIO_ERP1
 		converted[4] = 0x00; //CRC8H
 
 		// Data
 		converted[headerLength] = rORG;
-		p += headerLength;
-		p++; //rORG
-		p += extendedTelegramTypeAvailable;
-		p += originatorLength;
-		for (i = 0; i < (dataLength - erp1IdLength - 2 /* status, rORG */); i++) {
-			converted[headerLength + 1 + i] = *p++;
+		for (i = 0; i < (dataLength - 1); i++) {
+			converted[headerLength + 1 + i] = *data++;
 		}
-		status = *p++;
-		lastDataPos = headerLength + 1 + i;
-		for(i = 0; i < erp1IdLength; i++) {
-			converted[lastDataPos + i] = id[i];
-		}
-		converted[lastDataPos + i] = status;
-
 		// Optional Data
-		converted[headerLength + dataLength] = *p++; //Subtel		
-		for (i = 0; i < erp1IdLength; i++) {
-			converted[headerLength + dataLength + 1 + i] = 0xFF;
+		converted[headerLength + dataLength] = 0x00; // SubTelNum
+		for(i = 0; i < erp1IdLength; i++) {
+			converted[headerLength + dataLength + 1 + i] = id[i];
 		}
-		converted[headerLength + dataLength + 1 + i] = *p++; //dBm
-
-		_DEBUG2 printf("*** Convert optStart=%d LastDataPos=%d LastPacketPod=%d\n",
-			optStart, lastDataPos, (INT) (p - pPacket));
-
-		//PacketDump(&converted[0]);
+		////
+		converted[headerLength + dataLength + 1 + erp1IdLength] = dBm;
+		converted[headerLength + dataLength + 1 + erp1IdLength + 1] = secLevel;
 
 		for(i = 0; i < headerLength + dataLength + optionalLength; i++) {
-			pPacket[i] = converted[i];
+			Packet[i] = converted[i];
 		}
 	}
 	return(isERP2);
@@ -296,15 +316,13 @@ ULONG SystemMSec(void)
 //
 RETURN_CODE GetPacket(INT Fd, BYTE *Packet, USHORT BufferLength)
 {
-typedef enum
-{
-	GET_SYNC,
-	GET_HEADER,
-	CHECK_CRC8H,
-	GET_DATA,
-	CHECK_CRC8D,
-}
-STATES_GET_PACKET;
+	typedef enum {
+		GET_SYNC,
+		GET_HEADER,
+		CHECK_CRC8H,
+		GET_DATA,
+		CHECK_CRC8D,
+	} STATES_GET_PACKET;
 
 #define TIMEOUT_MSEC (10)
 #define SYNC_CODE (0x55)
@@ -325,7 +343,7 @@ STATES_GET_PACKET;
 	BYTE   *dataBuffer;
 	INT    readLength;
 
-	_DEBUG printf("*** GetPacket fd=%d\n", Fd);
+	_DEBUG3 printf("*** GetPacket fd=%d\n", Fd);
 
 	if (tickMSec == 0) {
 		tickMSec = SystemMSec();
@@ -334,7 +352,7 @@ STATES_GET_PACKET;
 	timeout = SystemMSec() - tickMSec;
 	if (timeout > TIMEOUT_MSEC) {
 		status = GET_SYNC;
-		_DEBUG printf("*** Timeout=%d\n", timeout);
+		_DEBUG printf("*** GetPacket:Timeout=%d\n", timeout);
 	}
 
 	while(TRUE) {
@@ -347,7 +365,7 @@ STATES_GET_PACKET;
 			//OK
 		}
 		else {
-			fprintf(stderr, "*** Read error=%d (%d) (%d)\n",
+			fprintf(stderr, "*** GetPacket:Read error=%d (%d) (%d)\n",
 			       readLength, errno, Fd);
 			perror("*** ERRNO");
 			continue;
@@ -370,11 +388,11 @@ STATES_GET_PACKET;
 			break;
 
 		case CHECK_CRC8H:
-			_DEBUG2 printf("**** CHECK_CRC8H=%d\n", count);
+			_DEBUG0 printf("*** GetPacket:CHECK_CRC8H=%d\n", count);
 			crc = Crc8Check(line, HEADER_BYTES);
 			if (crc != rxByte) {
-				fprintf(stderr, "*** CRC8H ERROR %02X:%02X\n", crc, rxByte);
-				fprintf(stderr, "*** %02X %02X %02X %02X %02X\n",
+				fprintf(stderr, "*** GetPacket:CRC8H ERROR %02X:%02X\n", crc, rxByte);
+				fprintf(stderr, "*** GetPacket:%02X %02X %02X %02X %02X\n",
 				       line[0], line[1], line[2], line[3], line[4]);
 
 				a = -1;
@@ -402,7 +420,7 @@ STATES_GET_PACKET;
 				}
 				break;
 			}
-			_DEBUG2 printf("**** CRC8H OK!\n");
+			_DEBUG0 printf("*** GetPacket: CRC8H OK!\n");
 
 			dataLength = (line[0] << 8) + line[1];
 			optionLength = line[2];
@@ -410,7 +428,7 @@ STATES_GET_PACKET;
 			dataBuffer = &line[5];
 
 			if ((dataLength + optionLength) == 0) {
-				_DEBUG printf("*** LENGTH ZERO!\n");
+				_DEBUG printf("*** GetPacket: LENGTH ZERO!\n");
 				if (rxByte == SYNC_CODE) {
 					status = GET_HEADER;
 					count = 0;
@@ -419,9 +437,9 @@ STATES_GET_PACKET;
 				status = GET_SYNC;
 				return OUT_OF_RANGE;
 			}
-			_DEBUG2 printf("**** datLen=%d optLen=%d type=%02X\n",
+			_DEBUG0 printf("*** GetPacket: datLen=%d optLen=%d type=%02X\n",
 				dataLength, optionLength, type);
-			_DEBUG2 printf("**** %02X %02X %02X %02X\n",
+			_DEBUG0 printf("*** GetPacket: %02X %02X %02X %02X\n",
 				line[0], line[1], line[2], line[3]);
 			status = GET_DATA;
 			count = 0;
@@ -436,22 +454,22 @@ STATES_GET_PACKET;
 			}
 
 			if (++count == (dataLength + optionLength)) {
-				_DEBUG2 printf("**** lastData=%02X\n", rxByte);
+				_DEBUG3 printf("*** GetPacket: lastData=%02X\n", rxByte);
 				status = CHECK_CRC8D;
 			}
 			break;
 
 		case CHECK_CRC8D:
-			_DEBUG2 printf("**** CHECK_CRC8D=%d\n", count);
+			_DEBUG0 printf("*** GetPacket: CHECK_CRC8D=%d\n", count);
 			status = GET_SYNC;
 			
 			if (count > BufferLength) {
-				_DEBUG printf("*** return BUFFER_TOO_SMALL\n");
+				_DEBUG printf("*** GetPacket: return BUFFER_TOO_SMALL\n");
 				return BUFFER_TOO_SMALL;
 			}
 			crc = Crc8Check(dataBuffer, count);
 			if (crc == rxByte) {
-				_DEBUG2 printf("**** return OK(%02X) xlen=%d\n", crc, count);
+				_DEBUG0 printf("*** GetPacket: return OK(%02X) xlen=%d\n", crc, count);
 				return OK; // Correct packet received
 			}
 			else if (rxByte == SYNC_CODE) {
@@ -466,6 +484,6 @@ STATES_GET_PACKET;
 		}
 		//printf("*** break switch()\n");
 	}
-	_DEBUG printf("*** break while()\n");
+	_DEBUG3 printf("*** GetPacket: break while return status=%d\n", status);
 	return (status == GET_SYNC) ? NO_RX_DATA : NEW_RX_DATA;
 }

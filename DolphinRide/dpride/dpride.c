@@ -35,7 +35,7 @@ static const char version[] = "\n@ dpride Version 1.27 \n";
 //#define CT_DEBUG (1)
 //#define SIG_DEBUG (1)
 //#define MSG_DEBUG (1)
-#define MODEL_DEBUG (1)
+//#define MODEL_DEBUG (1)
 ////#define RAW_INPUT (1) // RAW_INPUT Display for ERP2 DEBUG
 
 //
@@ -89,7 +89,7 @@ QUEUE_HEAD ResponseQueue; // CO Command Responce
 QUEUE_HEAD ExtraQueue;    // Event, Smack, etc currently not used
 QUEUE_HEAD FreeQueue;     // Free buffer
 
-static const INT QueueCount = 8;
+static const INT FreeQueueCount = 8;
 static const INT QueueTryTimes = 10;
 //static const INT QueueTryTimes = 100;
 static const INT QueueTryWait = 2; //msec
@@ -104,6 +104,7 @@ static UINT QECount = 0; // Enq ExtrQueue
 static UINT DECount = 0; // Deq ExtrQueue
 static UINT RDCount = 0; // QueueData
 static UINT MJCount = 0; // MainJob count
+static UINT PPCount = 0; // PushPacket count
 
 static const UINT _QDebug = QUEUE_DEBUG;
 #define _QD if (_QDebug)  
@@ -309,6 +310,36 @@ BYTE *Dequeue(QUEUE_HEAD *Queue)
 	return buffer;
 }
 
+#if 0 
+#define	STAILQ_INSERT_TAIL(head, elm, field) do {			\
+	(elm)->field.stqe_next = NULL;					\
+	*(head)->stqh_last = (elm);					\
+	(head)->stqh_last = &(elm)->field.stqe_next;			\
+} while (/*CONSTCOND*/0)
+
+#define	STAILQ_REMOVE(head, elm, type, field) do {			\
+	if ((head)->stqh_first == (elm)) {				\
+		STAILQ_REMOVE_HEAD((head), field);	
+
+head=Queue;
+field=Entries;
+
+#define	STAILQ_FOREACH(var, head, field)				\
+	for ((var) = ((head)->stqh_first);				\
+		(var);							\
+		(var) = ((var)->field.stqe_next))
+#endif
+
+INT QueueCount(QUEUE_HEAD *Queue)
+{
+	QUEUE_ENTRY *entry;
+	INT count = 0;
+	STAILQ_FOREACH(entry, Queue, Entries) {
+		count++;
+	}
+	return count;
+}
+
 VOID StartJobs(CMD_PARAM *Param)
 {
 	printf("**StartJobs\n");
@@ -346,10 +377,10 @@ VOID FreeQueueInit(VOID)
 	INT i;
 	struct QEntry *freeEntry;
 
-	for(i = 0; i < QueueCount; i++) {
+	for(i = 0; i < FreeQueueCount; i++) {
 		freeEntry = (struct QEntry *) calloc(sizeof(struct QEntry), 1);
 		if (freeEntry == NULL) {
-			fprintf(stderr, "InitializeQueue: calloc error=%d\n", i);
+			fprintf(stderr, "FreeQueueInit: calloc error=%d\n", i);
 			return;
 		}
 		Enqueue(&FreeQueue, freeEntry->Data);
@@ -387,13 +418,13 @@ VOID *ReadThread(VOID *arg)
 	_QD2 printf("**Start ReadThread()\n");
 
 	while(!stop_read) {
-		_QD printf("**ReadThread: %d\n", RDCount++);
+		_QD printf("**ReadThread: %d FreeQ=%d\n", RDCount++, QueueCount(&FreeQueue));
 
 		do {
 			dataBuffer = Dequeue(&FreeQueue);
 			if (dataBuffer == NULL) {
 				if (QueueTryTimes >= count) {
-					fprintf(stderr, "FreeQueue empty at ReadThread\n");
+					fprintf(stderr, "ReadThread: FreeQueue empty\n");
 					QueueStatus();
 					return (void*) NULL;
 				}
@@ -426,14 +457,14 @@ VOID *ReadThread(VOID *arg)
 #endif
 		}
 		else {
-			printf("invalid rType==%02X\n\n", rType);
+			fprintf(stderr, "ReadThread: invalid rType==%02X\n\n", rType);
 		}
 
 		if (stop_job) {
-			printf("**ReadThread breaked by stop_job-2\n");
+			_QD printf("**ReadThread breaked by stop_job-2\n");
 			break;
 		}
-		printf("**ReadTh: process=%d\n", packetType);
+		_QD printf("**ReadTh: process=%d\n", packetType);
 
 		switch (packetType) {
 		case RADIO_ERP1: //1  Radio telegram
@@ -455,7 +486,7 @@ VOID *ReadThread(VOID *arg)
 		default:
 			_QD QECount++;
 			QueueData(&ExtraQueue, dataBuffer, totalLength);
-			fprintf(stderr, "Unknown packet=%d\n", packetType);
+			fprintf(stderr, "ReadThread: Unknown packet=%d\n", packetType);
 			break;
 		}
 	}
@@ -526,11 +557,11 @@ BOOL InitSerial(OUT int *pFd)
 	}
 
 	if (p->ESPPort && p->ESPPort[0] == '\0') {
-		fprintf(stderr, "PORT access admission needed.\n");
+		fprintf(stderr, "Serial: PORT access admission needed.\n");
 		return 1;
 	}
 	else if ((fd = open(p->ESPPort, O_RDWR)) < 0) {
-		fprintf(stderr, "open error:%s\n", p->ESPPort);
+		fprintf(stderr, "Serial: open error:%s\n", p->ESPPort);
 		return 1 ;
 	}
 	bzero((void *) &tio, sizeof(tio));
@@ -572,7 +603,7 @@ ESP_STATUS GetResponse(OUT BYTE *Buffer)
 		}
 		timeout = SystemMSec() - startMSec;
 		if (timeout > RESPONSE_TIMEOUT) {
-			printf("****GetResponse() Timeout=%d\n", timeout);
+			fprintf(stderr, "GetResponse: Timeout=%d\n", timeout);
 			return TIMEOUT;
 		}
 		msleep(1);
@@ -682,9 +713,8 @@ int EoReadControl()
 #ifdef SECURE_DEBUG
 	printf("**EoReadControl: count=%d\n", count);
 #endif
-	//ReloadPublickey(p->PublickeyPath);
 	(void) CacheProfiles();
-	ReloadPublickey(p->PublickeyPath);
+
 	return count;
 }
 
@@ -703,11 +733,11 @@ void EoClearControl()
 	}
 
 	if (truncate(p->ControlPath, 0)) {
-		fprintf(stderr, "%s: truncate error=%s\n", __FUNCTION__,
+		fprintf(stderr, "EoClearControl: %s: truncate error=%s\n", __FUNCTION__,
 		p->ControlPath);
 	}
 	if (truncate(p->ModelPath, 0)) {
-		fprintf(stderr, "%s: truncate error=%s\n", __FUNCTION__,
+		fprintf(stderr, "EoClearControl: %s: truncate error=%s\n", __FUNCTION__,
 		p->ModelPath);
 	}
 	p->ControlCount = 0;
@@ -1062,7 +1092,6 @@ void EoSetEep(EO_CONTROL *P, byte *Id, byte *Data, uint Rorg)
 		return;
 	}
 
-	///////////////////////////////////////////
 	// Format EEP to string with secure mark //
 	sprintf(eep, "%02X-%02X-%02X", Rorg, func, type);
 	sprintf(sEep, "%s%s", Id[5] ? "!" : "", eep);
@@ -1104,7 +1133,7 @@ void EoSetEep(EO_CONTROL *P, byte *Id, byte *Data, uint Rorg)
 	//scCount = MakeSCutFields(trailingBuffer, pd, pe->Size);
 	scCount = MakeSCutFieldsWithCurrent(trailingBuffer, pd, pe->Size);
 	if (scCount == 0) {
-		fprintf(stderr, "No shortcuts here at %s, %s.\n", idBuffer, eep);
+		fprintf(stderr, "EoSetEep: No shortcuts here at %s, %s.\n", idBuffer, eep);
 		return;
 	}
 
@@ -1184,7 +1213,7 @@ void EoSetCm(EO_CONTROL *P, BYTE *Id, BYTE *Data, INT Length)
 	}
 	rtn = stat(P->BridgeDirectory, &sb);
 	if (!S_ISDIR(sb.st_mode) || rtn < 0) {
-		fprintf(stderr, "EoSetEep: Directory error=%s\n", P->BridgeDirectory);
+		fprintf(stderr, "EoSetCm: Directory error=%s\n", P->BridgeDirectory);
 		return;
 	}
 
@@ -1200,7 +1229,7 @@ void EoSetCm(EO_CONTROL *P, BYTE *Id, BYTE *Data, INT Length)
 
     scCount = MakeSCutFieldsWithCurrent(trailingBuffer, pd, pmc->Count);
 	if (scCount == 0) {
-		fprintf(stderr, "No shortcuts here at %s, %s.\n", idBuffer, pmc->CmStr);
+		fprintf(stderr, "EoSetCm:No shortcuts here at %s, %s.\n", idBuffer, pmc->CmStr);
 		return;
 	}
 #if MODEL_DEBUG
@@ -1208,7 +1237,7 @@ void EoSetCm(EO_CONTROL *P, BYTE *Id, BYTE *Data, INT Length)
 #endif
 	f = fopen(P->ControlPath, "a+");
 	if (f == NULL) {
-		fprintf(stderr, "EoSetEep: cannot open control file=%s\n",
+		fprintf(stderr, "EoSetCm: cannot open control file=%s\n",
 			P->ControlPath);
 		return;
 	}
@@ -1259,12 +1288,15 @@ void LogMessageRegister(char *buf)
 		//Warn("call MonitorMessage()");
 		loggedOK = MonitorMessage(buf);
 		if (p->VFlags) {
-			printf("MdgRegister: MonitorMessage=%s\n",
+			printf("MsgRegister: MonitorMessage=%s\n",
 			       loggedOK ? "OK" : "FAILED");
 		}
 	}
 	if (p->LocalLog > 0) {
 		EoLogRaw(buf);
+	}
+	if (!p->QuietMode) {
+		printf("R:%s\n", buf);
 	}
 }
 
@@ -1275,7 +1307,7 @@ void LogMessageStart(uint Id, char *Eep, char *Prefix)
 	struct tm   *time_inf;
 	char        buf[64];
   
-	if (p->Logger > 0 || p->LocalLog > 0) {
+	if (p->Logger > 0 || p->LocalLog > 0 || !p->QuietMode) {
 		timep = time(NULL);
 		time_inf = localtime(&timep);
 		strftime(buf, sizeof(buf), "%x %X", time_inf);
@@ -1286,30 +1318,23 @@ void LogMessageStart(uint Id, char *Eep, char *Prefix)
 			sprintf(EoLogMonitorMessage, "%s,%08X,", buf, Id);
 		}
 	}
-#ifdef MSG_DEBUG
-	printf("MSG##%s<%s>\n", __FUNCTION__, EoLogMonitorMessage);
-#endif
 }
 
 void LogMessageAdd(char *Point, double Data, char *Unit)
 {
 	EO_CONTROL *p = &EoControl;
 	char buf[128];
-	if (p->Logger > 0 || p->LocalLog > 0) {
+	if (!p->QuietMode) {
 		sprintf(buf, "%s=%.2lf%s ", Point, Data, Unit);
 		strcat(EoLogMonitorMessage, buf);
 	}
-#ifdef MSG_DEBUG
-	printf("MSG##%s<%s>\n", __FUNCTION__, EoLogMonitorMessage);
-#endif
-
 }
 
 void LogMessageAddInt(char *Point, int Data)
 {
 	EO_CONTROL *p = &EoControl;
 	char buf[128];
-	if (p->Logger > 0 || p->LocalLog > 0) {
+	if (!p->QuietMode) {
 		sprintf(buf, "%s=%d ", Point, Data);
 		strcat(EoLogMonitorMessage, buf);
 	}
@@ -1319,7 +1344,7 @@ void LogMessageAddDbm(byte Data)
 {
 	EO_CONTROL *p = &EoControl;
 	char buf[128];
-	if (p->Logger > 0 || p->LocalLog > 0) {
+	if (!p->QuietMode) {
 		sprintf(buf, "-%d ", Data);
 		strcat(EoLogMonitorMessage, buf);
 	}
@@ -1329,7 +1354,7 @@ void LogMessageMonitor(char *Eep, char *Message)
 {
 	EO_CONTROL *p = &EoControl;
 	char buf[DATABUFSIZ];
-	if (p->Logger > 0 || p->LocalLog > 0) {
+	if (!p->QuietMode) {
 		sprintf(buf, "%s,%s", Eep ? Eep : NULL, Message);
 		strcat(EoLogMonitorMessage, buf);
 	}
@@ -1339,22 +1364,24 @@ void LogMessageOutput()
 {
 	EO_CONTROL *p = &EoControl;
 	BOOL loggedOK;
-	if (p->Logger > 0) {
-		//Warn("call MonitorMessage()");
-		loggedOK = MonitorMessage(EoLogMonitorMessage);
-		DebugPrint(EoLogMonitorMessage);
-		if (p->VFlags) {
-			printf("MsgOut: MonitorMessage=%s\n",
-			       loggedOK ? "OK" : "FAILED");
+
+	if (p->Mode == Operation) {
+		if (p->Logger > 0) {
+			//Warn("call MonitorMessage()");
+			loggedOK = MonitorMessage(EoLogMonitorMessage);
+			DebugPrint(EoLogMonitorMessage);
+			if (p->VFlags) {
+				printf("MsgOut: MonitorMessage=%s\n",
+					loggedOK ? "OK" : "FAILED");
+			}
+		}
+		if (p->LocalLog > 0) {
+			EoLogRaw(EoLogMonitorMessage);
+		}
+		if (!p->QuietMode) {
+			printf("O:%s\n", EoLogMonitorMessage);
 		}
 	}
-	if (p->LocalLog > 0) {
-		EoLogRaw(EoLogMonitorMessage);
-	}
-#ifdef MSG_DEBUG
-	printf("MSG##%s<%s>\n", __FUNCTION__, EoLogMonitorMessage);
-#endif
-
 }
 
 //
@@ -1365,10 +1392,10 @@ void PrintTelegram(EO_PACKET_TYPE PacketType, byte *Id, byte ROrg, byte *Data, i
 	int count, sum;
 	UINT func, type, man;
 	BOOL teachIn = FALSE;
-	time_t      timep;
-	struct tm   *time_inf;
 	char buf[MAINBUFSIZ];
 	char eepbuf[128];
+	time_t      timep;
+	struct tm   *time_inf;
 	char timebuf[64];
 
 	LogMessageStart(ByteToId(Id), NULL, NULL);
@@ -1377,9 +1404,8 @@ void PrintTelegram(EO_PACKET_TYPE PacketType, byte *Id, byte ROrg, byte *Data, i
 	timep = time(NULL);
 	time_inf = localtime(&timep);
 	strftime(timebuf, sizeof(timebuf), "%x %X", time_inf);
-	
-	printf("%s %02X%02X%02X%02X (%d %d) ",
-	       timebuf, Id[0], Id[1], Id[2], Id[3], Dlen, Olen);
+	printf("M:%s %02X%02X%02X%02X (%d %d) ",
+       timebuf, Id[0], Id[1], Id[2], Id[3], Dlen, Olen);
 
 	switch(ROrg) {
 	case 0xF6: //RPS
@@ -1434,8 +1460,8 @@ void PrintTelegram(EO_PACKET_TYPE PacketType, byte *Id, byte ROrg, byte *Data, i
 		break;
 
 	default:
-		sprintf(buf, "Unknown PT:%02X R-ORG:%02X, %02X %02X %02X %02X %02X %02X %02X -%d",
-			PacketType, ROrg, 
+		sprintf(buf, "Unknown R-ORG:%02X, %02X %02X %02X %02X %02X %02X %02X -%d",
+			ROrg, 
 			Data[0], Data[1], Data[2], Data[3], Data[4], Data[5], Data[6], Data[Dlen + 4]);
 		break;
 	}
@@ -1459,8 +1485,9 @@ void PrintTelegram(EO_PACKET_TYPE PacketType, byte *Id, byte ROrg, byte *Data, i
 		man = 0xb00;
 		sprintf(eepbuf, "%02X-%02X-%02X %03x", ROrg, func, type, man);
 	}
-	else if (Dlen == 7 && Olen == 7 && Data[0] == 0x80) {
-			// D2-03-20, special beacon
+	else if (ROrg == 0xD2 && Dlen == 7 && Olen == 7
+		&& Data[0] == 0x80 && Data[Dlen - 2] /*status*/ == 0x80) {
+		// D2-03-20, special beacon
 		teachIn = TRUE;
 		strcpy(eepbuf, "D2-03-20");
 	}
@@ -1472,7 +1499,6 @@ void PrintTelegram(EO_PACKET_TYPE PacketType, byte *Id, byte ROrg, byte *Data, i
 		printf("%s\n", buf);
 	}
 
-	//Warn("call LogMessageOutput()");
 	LogMessageMonitor(eepbuf, buf);
 	LogMessageOutput();
 }
@@ -1694,14 +1720,16 @@ void PushPacket(BYTE *Buffer)
 	INT seq;
 	INT index;
 	INT secureMark;
+	INT i;
 	BYTE rOrg;
 	BYTE *data;
 	NODE_TABLE *nt = NULL;
+	const INT erp1addrOffset = -5;
 	const INT cdmMark = 1;    //CDM rORG, 0x40 or 0x33
 	const INT seqIdx = 1;     //SEQ|IDX
 	const INT cdmHeader = 2;  //LEN
 	const INT rOrgByte = 1;   //real rORG
-	const INT statusByte = 1; //end of data
+	const INT trailBytes = 5;  //SrcAddress(4) + status(1))
 
 	length = (INT) (Buffer[0] << 8 | Buffer[1]);
 	optionLength = (INT) Buffer[2];
@@ -1711,15 +1739,17 @@ void PushPacket(BYTE *Buffer)
 	data = &Buffer[HEADER_SIZE + cdmMark + seqIdx]; // Header(5) + R-ORG(1) + seq/index
 	seq = Buffer[6] >> 6;
 	index = Buffer[6] & 0x3F;
-	thisDataLength = length - cdmMark - seqIdx - statusByte + ((index == 0) & secureMark);
+
+	thisDataLength = length - cdmMark - seqIdx - trailBytes + ((index == 0) & secureMark);
 
 	if(p->Debug > 2) {
 		printf("PushPacket Dump:\n");
 		PacketDump(Buffer);
 	}
 #ifdef SECURE_DEBUG
-	if (secureMark)
-		printf("SEC-Push:\n");
+	printf("PP Push: secureMark=%d\n", secureMark);
+	printf("PP thisDatalen=%d len=%d ((index == 0) & secureMark)=%d\n",
+		thisDataLength, length, ((index == 0) & secureMark));
 #endif	
 	// This method does not completely avoid collisions, but may reduce them somewhat.
 	pb = &CdmBuffer[seq | (secureMark << 2)];
@@ -1727,34 +1757,49 @@ void PushPacket(BYTE *Buffer)
 	if (index == 0) { // new CDM comming
 		data += cdmHeader; // CDM Hdr(2)
 		totalDataLength = (INT) (Buffer[7] << 8 | Buffer[8]);
+		// ex. 14 -= 3 ==>11
 		thisDataLength -= (cdmHeader + rOrgByte);
 
 		pb->Length = totalDataLength;
 		pb->CurrentLength = 0;
 
-		pb->Id[0] = Buffer[HEADER_SIZE + length + 1];
-		pb->Id[1] = Buffer[HEADER_SIZE + length + 2];
-		pb->Id[2] = Buffer[HEADER_SIZE + length + 3];
-		pb->Id[3] = Buffer[HEADER_SIZE + length + 4];
-
-		memcpy(&pb->Buffer[HEADER_SIZE], data, rOrgByte + thisDataLength);
+		pb->Id[0] = Buffer[HEADER_SIZE + length + erp1addrOffset];
+		pb->Id[1] = Buffer[HEADER_SIZE + length + erp1addrOffset + 1];
+		pb->Id[2] = Buffer[HEADER_SIZE + length + erp1addrOffset + 2];
+		pb->Id[3] = Buffer[HEADER_SIZE + length + erp1addrOffset + 3];
+		for(i = 0; i < HEADER_SIZE; i++) {
+			pb->Buffer[i] = 0;
+		}
+		memcpy(&pb->Buffer[HEADER_SIZE], data, (rOrgByte & !secureMark) + thisDataLength);
+#if SECURE_DEBUG
+		printf("PP index==0: thisLen=%d copyLen=%d\n",
+			thisDataLength, (rOrgByte & !secureMark) + thisDataLength);
+		printf("PP-0: ");
+		DataDump(&pb->Buffer[HEADER_SIZE], (rOrgByte & !secureMark) + thisDataLength);
+#endif
 	}
-	else {
-		// This was solved.
+	else { // index > 0
+		// Check address compare.
 		//if (p->Debug > 2) {
 		//	printf("IDCHK:pb->Id=%02X%02X%02X%02X *(UINT*)&pb->Id[]=%08X *(UINT*)&Buffer[]=%08X\n",
 		//	       pb->Id[0], pb->Id[1], pb->Id[2], pb->Id[3],
-		//	       *(UINT *) &pb->Id[0], *(UINT *) &Buffer[HEADER_SIZE + length + 1]);
+		//	       *(UINT *) &pb->Id[0], *(UINT *) &Buffer[HEADER_SIZE + length  + erp1addrOffset]);
 		//}
-
-		if (*(UINT *) &pb->Id[0] == *(UINT *) &Buffer[HEADER_SIZE + length + 1]) {
+		if (*(UINT *) &pb->Id[0] == *(UINT *) &Buffer[HEADER_SIZE + length + erp1addrOffset]) {
 			// copy data
 			memcpy(&pb->Buffer[HEADER_SIZE + pb->CurrentLength + (rOrgByte & !secureMark)], data, thisDataLength);
 		}
 		else {
-			Error("Registered ID mismatched");
+			fprintf(stderr, "%s: Registered ID mismatched %08X;%08X\n", __func__,
+				*(UINT *) &pb->Id[0], *(UINT *) &Buffer[HEADER_SIZE + length + erp1addrOffset]);
 			return;
 		}
+#if SECURE_DEBUG
+		printf("PP index==%d: curLen=%d copyLen(thisLen)=%d\n",
+			index, pb->CurrentLength, thisDataLength);
+		printf("PP-%d: ", index);
+		DataDump(&pb->Buffer[HEADER_SIZE + pb->CurrentLength + (rOrgByte & !secureMark)], thisDataLength);
+#endif
 	}
 
 	if (p->Debug > 0) {
@@ -1763,7 +1808,6 @@ void PushPacket(BYTE *Buffer)
 	}
 
 	pb->CurrentLength += thisDataLength;
-	
 	if (pb->CurrentLength >= pb->Length) {
 		// Have to Push packet
 		BYTE   *dataBuffer;
@@ -1771,11 +1815,12 @@ void PushPacket(BYTE *Buffer)
 		INT    totalLength;
 		INT    count = 0;
 
+		_QD printf("**PuchPacket: %d FreeQ=%d\n", PPCount++, QueueCount(&FreeQueue));
 		do {
 			dataBuffer = Dequeue(&FreeQueue);
 			if (dataBuffer == NULL) {
 				if (QueueTryTimes >= count) {
-					fprintf(stderr, "FreeQueue empty at PushPacket(MainJob)\n");
+					fprintf(stderr, "PuchPacket: FreeQueue empty at PushPacket(MainJob)\n");
 					QueueStatus();
 					return;
 				}
@@ -1788,18 +1833,11 @@ void PushPacket(BYTE *Buffer)
 		//When Secure-Telegram, adjust encapslated R-Org length  
 		//pb->Length -= secureMark;
 		//The last packet, Make Header
-		dataLength = pb->Length + (rOrgByte & !secureMark) + statusByte;
-		if (!secureMark) { // CDM (rOrg == 0x40)
-			pb->Buffer[0] = dataLength >> 8;
-			pb->Buffer[1] = dataLength & 0xFF;
-			pb->Buffer[2] = optionLength;
-			pb->Buffer[3] = 1; // Type: RADIO_ERP1
-			pb->Buffer[4] = 0; // CRC
-
-			memcpy(&pb->Buffer[HEADER_SIZE + pb->Length + (rOrgByte & !secureMark)],
-				&Buffer[HEADER_SIZE + length - statusByte], statusByte + optionLength);
-		}
-
+		dataLength = pb->Length + (rOrgByte & !secureMark) + trailBytes;
+#if SECURE_DEBUG
+		printf("PP Last:");
+		DataDump(&pb->Buffer[HEADER_SIZE], pb->Length);
+#endif
 		if (p->Debug > 0) {
 			//Make Trailer
 			printf("PP %d-%d: thisLen=%d Queue=%d,%d opt=%d\n", seq, index, thisDataLength,
@@ -1813,24 +1851,25 @@ void PushPacket(BYTE *Buffer)
 			INT status;
 			INT decLength;
 #ifdef SECURE_DEBUG
-			INT i;
 			BYTE nextRlc[4];
-			printf("+P"); PacketDump(&pb->Buffer[0]);
 #endif
 			/* Need to make new Header to DecBuffer !!*/
-			pb->DecBuffer[0] = dataLength;
+			pb->DecBuffer[0] = dataLength >> 8;
 			pb->DecBuffer[1] = dataLength & 0xFF;
 			pb->DecBuffer[2] = optionLength;
 			pb->DecBuffer[3] = 1; // Type: RADIO_ERP1
 			pb->DecBuffer[4] = 0; // CRC
-			if (p->Debug > 0) {
-				// Check needed!!!!
+
+			if (p->Debug > 3) {
 				printf("PP: Copy &pb->DecBuffer[%d] << &Buffer[%d], len=%d\n",
-					HEADER_SIZE + pb->Length - statusByte, length, statusByte + optionLength);
+					HEADER_SIZE + pb->Length - trailBytes, length, trailBytes + optionLength);
 			}
-			memcpy(&pb->DecBuffer[HEADER_SIZE + pb->Length - statusByte],
-				&Buffer[HEADER_SIZE + length - statusByte], statusByte + optionLength);
-			
+			memcpy(&pb->DecBuffer[HEADER_SIZE + pb->Length],
+				&Buffer[HEADER_SIZE + length - trailBytes], trailBytes + optionLength);
+
+#ifdef SECURE_DEBUG
+			printf("PP-org:"); PacketDump(&pb->DecBuffer[0]);
+#endif
 			ps = GetSecureRegister(secId);
 			if (ps == NULL) {
 				// not SecureRegistered, use NODE_TABLE
@@ -1842,6 +1881,7 @@ void PushPacket(BYTE *Buffer)
 					sec = nt->Secure;
 					SecGetRlc(sec, rlc);
 
+					////////////////////////
 					/* read RLC from file */
 					pt = GetPublickey(secId);
 					//ReadRlc(pt); //-->delete!
@@ -1854,12 +1894,14 @@ void PushPacket(BYTE *Buffer)
 					}
 				}
 				else {
-					Error("Secure NULL");
-					if (nt != NULL) {
-						fprintf(stderr, "EEP=%s Secure=%p\n", nt->Eep, nt->Secure);
-					}
-					else {
-						fprintf(stderr, "Secure GetTableId is NULL\n");
+					if (p->Debug > 1) {
+						Error("Secure NULL");
+						if (nt != NULL) {
+							fprintf(stderr, "PushPacket: EEP=%s Secure=%p\n", nt->Eep, nt->Secure);
+						}
+						else {
+							fprintf(stderr, "PushPacket: Secure GetTableId is NULL\n");
+						}
 					}
 					return;
 				}
@@ -1878,13 +1920,15 @@ void PushPacket(BYTE *Buffer)
 				}
 				ps->Sec = sec;
 			}
+
 #ifdef SECURE_DEBUG
 			printf("ORG(%d):", pb->Length - 1);
 			for(i = 0; i < pb->Length - 1; i++) {
-				printf(" %02X", pb->Buffer[i + HEADER_SIZE]);
+					printf(" %02X", pb->Buffer[i + HEADER_SIZE]);
 			}
 			printf("\n");
 #endif
+
 			pb->Length -= 8; // Actual decrypt length (== declength?)
 
 			// Just in case, when some troubles happen...
@@ -1913,7 +1957,7 @@ void PushPacket(BYTE *Buffer)
 			while(0);
 #endif
 			if (p->Debug > 0) {
-				printf("SEC: declength=%d pb->Length=%d length=%d optionLength=%d\n",
+				printf("SEC: decLength=%d pb->Length=%d length=%d optionLength=%d\n",
 					decLength, pb->Length, length, optionLength);
 			}
 
@@ -1926,11 +1970,22 @@ void PushPacket(BYTE *Buffer)
 			(void) SecGetRlc(sec, nextRlc);
 			printf("SEC: ++nextRlc:%02X %02X %02X %02X\n", nextRlc[0], nextRlc[1], nextRlc[2], nextRlc[3]);
 #endif
-			totalLength = HEADER_SIZE + length + statusByte + optionLength;
+			totalLength = HEADER_SIZE + length + trailBytes + optionLength;
 			memcpy(dataBuffer, pb->DecBuffer, totalLength);
 		}
-		else {
-			totalLength = HEADER_SIZE + pb->Length + statusByte + optionLength;
+		else /* !secureMark */ {
+		// CDM (rOrg == 0x40)
+
+			pb->Buffer[0] = dataLength >> 8;
+			pb->Buffer[1] = dataLength & 0xFF;
+			pb->Buffer[2] = optionLength;
+			pb->Buffer[3] = 1; // Type: RADIO_ERP1
+			pb->Buffer[4] = 0; // CRC
+
+			memcpy(&pb->Buffer[HEADER_SIZE + pb->Length + (rOrgByte & !secureMark)],
+				&Buffer[HEADER_SIZE + length - trailBytes], trailBytes + optionLength);
+
+			totalLength = HEADER_SIZE + pb->Length + trailBytes + optionLength;
 			memcpy(dataBuffer, pb->Buffer, totalLength);
 		}
 		QueueData(&DataQueue, dataBuffer, totalLength);
@@ -1980,12 +2035,12 @@ bool MainJob(BYTE *Buffer)
 	}
 	
 	data = &Buffer[HEADER_SIZE + 1]; // data points next to rOrg
-	status = data[dataLength - 1];   // Last data is status byte
-	id[0] = data[dataLength];        // copy 1 offset from optional data 
-	id[1] = data[dataLength + 1];
-	id[2] = data[dataLength + 2];
-	id[3] = data[dataLength + 3];
+	id[0] = data[dataLength - 6];    //rOrg(1) + AddrLen(4) + Stat(1)=6  
+	id[1] = data[dataLength - 5];
+	id[2] = data[dataLength - 4];
+	id[3] = data[dataLength - 3];
 	id[4] = id[5] = '\0';            // clear these for special security options
+	status = data[dataLength - 2];   // Last data is status byte
 
 	nt = GetTableId(ByteToId(id));
 	newIdComming = nt == NULL;
@@ -2014,7 +2069,7 @@ bool MainJob(BYTE *Buffer)
 	case 0x35: // SEC_TI
         teachIn = TRUE;
 		if (p->Debug > 1) {
-			DataDump(data - 1, dataLength - 1);
+			DataDump(data - 1, dataLength - 5);
 		}
 		break;
 
@@ -2022,7 +2077,7 @@ bool MainJob(BYTE *Buffer)
 	case 0x31: // SECR
 	case 0x32: // SECD
 		if (p->Debug > 1) {
-			DataDump(data - 1, dataLength - 1);
+			DataDump(data - 1, dataLength - 5);
 		}
 
 		if (rOrg == 0x31 || p->Mode == Operation && rOrg == 0x30) {
@@ -2065,10 +2120,10 @@ bool MainJob(BYTE *Buffer)
 				else {
 					Error("Secure NULL");
 					if (nt != NULL) {
-						fprintf(stderr, "EEP=%s Secure=%p\n", nt->Eep, nt->Secure);
+						fprintf(stderr, "MJ: EEP=%s Secure=%p\n", nt->Eep, nt->Secure);
 					}
 					else {
-						fprintf(stderr, "Secure GetTableId is NULL\n");
+						fprintf(stderr, "MJ: Secure GetTableId is NULL\n");
 					}
 					//return;
 					// nothing to do
@@ -2084,14 +2139,14 @@ bool MainJob(BYTE *Buffer)
 #endif
 				sec = ps->Sec;
 				if (sec== NULL) {
-					fprintf(stderr, "ps but sec is NULL, %08lX:%d\n", secId, ps->Status);
+					fprintf(stderr, "MJ: ps but sec is NULL, %08lX:%d\n", secId, ps->Status);
 					break;
 				}
 				rlcLength = ps->RlcLength;
 
 				//nt = GetTableId(secId);
 				//if (nt == NULL) {
-				//	fprintf(stderr, "ps but nt is NULL, %08lX:%d\n", secId, ps->Status);
+				//	fprintf(stderr, "MJ: ps but nt is NULL, %08lX:%d\n", secId, ps->Status);
 				//	break;
 				//}
 				//else {
@@ -2103,7 +2158,7 @@ bool MainJob(BYTE *Buffer)
 			}
 #ifdef SECURE_DEBUG
 			printf("ORG:");
-			for(i = 0; i < dataLength - 1; i++) {
+			for(i = 0; i < dataLength - 6; i++) {
 				printf(" %02X", data[i]); //Print without Header
 			}
 			printf("\n");
@@ -2237,8 +2292,8 @@ bool MainJob(BYTE *Buffer)
 	case 0x40: // CDM
 		PushPacket(Buffer);
 		if (p->Debug > 1) {
-			printf("PushedData:\n");
-			DataDump(data, dataLength - 1);
+			printf("PushedData(rORG=0x40):");
+			DataDump(data, dataLength - 6);
 		}
 		break;
 
@@ -2275,7 +2330,8 @@ bool MainJob(BYTE *Buffer)
 			}
 		}
 		if (p->Debug > 1) {
-			DataDump(data, dataLength - 1);
+			printf("PushedData(rORG=0x33):");
+			DataDump(data, dataLength - 6);
 		}
 		break;
 
@@ -2290,12 +2346,12 @@ bool MainJob(BYTE *Buffer)
 	case 0xD0: // SMACK_SIGNAL:
 		if (p->Debug > 2) {
 			printf("MJ-Data:%02X: ", rOrg);
-			DataDump(data, dataLength - 1);
+			DataDump(data, dataLength - 6);
 		}
 		break;
 		
 	default:
-		fprintf(stderr, "%s: Unknown rOrg=%02X pType=%02X (%d %d)\n",
+		fprintf(stderr, "MJ: %s: Unknown rOrg=%02X pType=%02X (%d %d)\n",
 			__FUNCTION__, rOrg, packetType, dataLength, optionLength);
 		do {
 			char bu[32];
@@ -2308,7 +2364,7 @@ bool MainJob(BYTE *Buffer)
 	} // End switch(rOrg)
 
 	if (packetType != RadioErp1) {
-		fprintf(stderr, "%s: Unknown type = %02X (%d %d)\n",
+		fprintf(stderr, "MJ: %s: Unknown type = %02X (%d %d)\n",
 			__FUNCTION__, packetType, dataLength, optionLength);
 		//return false;
 	}
@@ -2319,16 +2375,7 @@ bool MainJob(BYTE *Buffer)
 			id[0] , id[1] , id[2] , id[3], rOrg, teachIn ? "T" : "");
 	}
 
-	if (teachIn && p->Mode == Monitor) {
-#if CMD_DEBUG
-		printf("!C!teachIn && p->Mode == Monitor\n");
-#endif
-		// This process for Minitor and Register Mode //
-		if (p->Debug > 1) {
-			PrintTelegram(packetType, id, rOrg, data, dataLength, optionLength);
-		}
-	}
-	else if (teachIn && p->Mode == Register) {
+	if (teachIn && p->Mode == Register) {
 		SECURE_REGISTER *ps;
 		UINT secId = ByteToId(id);
 		
@@ -2344,41 +2391,45 @@ bool MainJob(BYTE *Buffer)
 		case 0xD4: //UTE
 			if (newIdComming) {
 				PUBLICKEY *pt;
-
-				if (isSecure || IsSecureCDM(id)) {
+#if SECURE_DEBUG
+				printf("!S! isSecure=%d IsSecureCDM=%d\n", isSecure, IsSecureCDM(id));
+#endif
+				if (isSecure |= IsSecureCDM(id)) {
 					id[5] = '!';
 				}
 				EoSetEep(p, id, data, rOrg);
 				idCount = EoReadControl();
-#if SECURE_DEBUG
-				printf("!S! isSecure=%d IsSecureCDM=%d\n", isSecure, IsSecureCDM(id));
-#endif
-				ps = GetSecureRegister(secId);
-				if (ps == NULL) {
-					if (p->Debug > 2) {
-						Warn("No secure telegram");
-					}
-				}
-				else if (ps != NULL && ps->Status == REGISTERED) {
-					nt = GetTableId(secId);
-					if (nt == NULL) {
-						Error("GetTableId-2");
-						break;
-					}
-					nt->Secure = ps->Sec; // SEC_HANDLE
-					pt = AddPublickey(p, secId, ps);
-					if (pt == NULL) {
-						Error("AddPublickey");
-					}
-					else {
-						if (p->Debug > 1) {
-							printf("TI: RLC path:%s\n", pt->RlcPath);
+
+				if (isSecure) {
+					ReloadPublickey(p->PublickeyPath);
+					ps = GetSecureRegister(secId);
+					if (ps == NULL) {
+						if (p->Debug > 2) {
+							Warn("No secure telegram");
 						}
 					}
-					ClearSecureRegister(secId);
-				}
-				else {
-					fprintf(stderr, "TI: Unkown error status=%d", ps->Status);
+					else if (ps != NULL && ps->Status == REGISTERED) {
+						nt = GetTableId(secId);
+						if (nt == NULL) {
+							Error("GetTableId-2");
+							break;
+						}
+						nt->Secure = ps->Sec; // SEC_HANDLE
+						pt = AddPublickey(p, secId, ps);
+						if (pt == NULL) {
+							Error("AddPublickey");
+							return FALSE;
+						}
+						else {
+							if (p->Debug > 1) {
+								printf("TI: RLC path:%s\n", pt->RlcPath);
+							}
+						}
+						ClearSecureRegister(secId);
+					}
+					else {
+						fprintf(stderr, "MJ: TI: Unkown error status=%d", ps->Status);
+					}
 				}
 			}
 #if CMD_DEBUG
@@ -2391,7 +2442,7 @@ bool MainJob(BYTE *Buffer)
 		//case 0x05: // CM_TI on ERP2:
 			// Note that CM_TI doesn't allow secure telegram.
 			if (newIdComming) {
-				EoSetCm(p, id, data, dataLength - 2 /* 2=rOrg+Status */);
+				EoSetCm(p, id, data, dataLength - 6 /* 6=rOrg+SrcAddr+Status */);
 				idCount = EoReadControl();
 			}
 #if CMD_DEBUG
@@ -2415,7 +2466,7 @@ bool MainJob(BYTE *Buffer)
 				ps = NewSecureRegister();
 				if (ps == NULL) {
 					Error("NewSecureRegister no space");
-					return false;
+					return FALSE;
 				}
 				ps->Id = secId;
 				ps->Status = FIRST_COME;
@@ -2425,9 +2476,10 @@ bool MainJob(BYTE *Buffer)
 				memcpy(ps->Rlc, &data[2], ps->RlcLength);
 				memcpy(ps->Key, &data[2 + ps->RlcLength], 8);
 
+				//26=(1:rOrg + 2:SecHdr + 16:Key + 2:MinRlc + 4:SrcAddr + 1:Stat)
 				if (dataLength >= 26) {
 #ifdef SECURE_DEBUG
-					printf("SECURE1: Long dataLength(>26)=%d\n", dataLength);
+					printf("SECURE1: Long Secure TeachIn(>26)=%d\n", dataLength);
 #endif
 					memcpy(ps->Key, &data[2 + ps->RlcLength], 16);
 					ps->Status = REGISTERED;
@@ -2493,7 +2545,7 @@ bool MainJob(BYTE *Buffer)
 #if CMD_DEBUG
 		printf("!C!p->Mode == Monitor\n");
 #endif
-		PrintTelegram(packetType, id, rOrg, data, dataLength - 1, optionLength);
+		PrintTelegram(packetType, id, rOrg, data, dataLength, optionLength);
 	}
 	//else if (p->Mode == Operation || teachIn && (rOrg == 0xD2 || rOrg == 0xF6)) {
 	else if (p->Mode == Operation) {
@@ -2601,7 +2653,7 @@ bool MainJob(BYTE *Buffer)
 			break;
 		}
 	}
-	
+
 	if (p->Debug > 2 && 
 		((teachIn && p->Mode == Register) || p->Mode == Operation)) {
 		PrintItems();
@@ -2658,7 +2710,7 @@ int main(int ac, char **av)
 
 	f = fopen(p->PidPath, "w");
 	if (f == NULL) {
-		fprintf(stderr, ": cannot create pid file=%s\n",
+		fprintf(stderr, "main: cannot create pid file=%s\n",
 			p->PidPath);
 		exit(0);
 	}
@@ -2666,7 +2718,7 @@ int main(int ac, char **av)
 	fclose(f);
 	////free(p->PidPath);
 	if (InitBrokers() != OK) {
-		fprintf(stderr, "No broker notify mode\n");
+		fprintf(stderr, "main: No broker notify mode\n");
 	}
 
 	if (p->LocalLog) {
@@ -2706,26 +2758,26 @@ int main(int ac, char **av)
 		p->FilterOp = Ignore;
 		modeSet = modeMonitor;
 		if (p->VFlags)
-			fprintf(stderr, "Start monitor mode.\n");
+			fprintf(stderr, "main: Start monitor mode.\n");
 		break;
 
 	case Register:
 		p->FilterOp = p->CFlags ? Clear : Ignore;
 		modeSet = modeRegister;
 		if (p->VFlags)
-			fprintf(stderr, "Start register mode.\n");
+			fprintf(stderr, "main: Start register mode.\n");
 		break;
 
 	case Operation:
 		p->FilterOp = Read;
 		modeSet = modeOperation;
 		if (p->VFlags)
-			fprintf(stderr, "Start operation mode.\n");
+			fprintf(stderr, "main: Start operation mode.\n");
 		break;
 	}
 
 	if (!InitEep(p->EEPFile)) {
-		fprintf(stderr, "InitEep error=%s\n", p->EEPFile);
+		fprintf(stderr, "main: InitEep error=%s\n", p->EEPFile);
 		CleanUp(0);
 		exit(1);
 	}
@@ -2743,6 +2795,7 @@ int main(int ac, char **av)
 			: p->Mode == Operation ? "Operation" : "Monitor");
 #endif
 		p->ControlCount = EoReadControl();
+		ReloadPublickey(p->PublickeyPath);	
 	}
 	if (p->AFlags) {
 		PrintEepAll();
@@ -2750,7 +2803,7 @@ int main(int ac, char **av)
 	}
 	//if (p->Mode = Operation && p->ControlCount > 0) {
 	//	if (!EoApplyFilter()) {
-	//		fprintf(stderr, "EoApplyFilter error\n");
+	//		fprintf(stderr, "main: EoApplyFilter error\n");
 	//	}
 	//}
 
@@ -2767,7 +2820,7 @@ int main(int ac, char **av)
 	pthread_mutex_init(&ExtraQueue.lock, NULL);
 
 	if (InitSerial(&fd)) {
-		fprintf(stderr, "InitSerial error\n");
+		fprintf(stderr, "main: InitSerial error\n");
 		CleanUp(0);
 		exit(1);
 	}
@@ -2782,14 +2835,14 @@ int main(int ac, char **av)
 
 	rtn = pthread_create(&thAction, NULL, ActionThread, (void *) thdata);
 	if (rtn != 0) {
-		fprintf(stderr, "pthread_create() ACTION failed for %d.",  rtn);
+		fprintf(stderr, "main: pthread_create() ACTION failed for %d.",  rtn);
 		CleanUp(0);
 		exit(EXIT_FAILURE);
 	}
 
 	rtn = pthread_create(&thRead, NULL, ReadThread, (void *) thdata);
 	if (rtn != 0) {
-		fprintf(stderr, "pthread_create() READ failed for %d.",  rtn);
+		fprintf(stderr, "main: pthread_create() READ failed for %d.",  rtn);
 		CleanUp(0);
 		exit(EXIT_FAILURE);
 	}
@@ -2798,25 +2851,32 @@ int main(int ac, char **av)
 	thdata->ThRead = thRead;
 	SetThdata(*thdata);
 
-	if (p->Debug > 0)
+	if (p->Debug > 1)
         printf("**main() started fd=%d(%s) mode=%d(%s) Clear=%d\n",
 	       fd, p->ESPPort, p->Mode, CommandName(p->Mode), p->CFlags);
 
 	while(!read_ready) {
-		printf("**main() Wait read_ready\n");
+		if (p->Debug > 1)
+			printf("**main() Wait read_ready\n");
 		msleep(100);
 	}
-	if (p->Debug > 0)
+	if (p->Debug > 1)
 		printf("**main() read_ready\n");
 
 	p->ERP1gw = 0;	
 	rtn = 0;
 	do {
+		if (p->Debug > 1) {
+			printf("**main() WriteReset\n");
+		}
 		initStatus = CO_WriteReset();
 		if (initStatus == OK) {
 			msleep(200);
 
 			initStatus = CO_WriteMode(modeSet); // ERP1:0 or ERP2:1
+			if (p->Debug > 1) {
+				printf("**main() WriteMode=ESP%d\n", modeSet ? 2 : 1);
+			}
 		}
 		if (initStatus == RET_NOT_SUPPORTED) {
 			printf("**main() Oops! this GW should be ERP1, and mark it.\n");
@@ -2824,11 +2884,11 @@ int main(int ac, char **av)
 			break;
 		}
 		else if (initStatus != OK) {
-			printf("**main() Reset/WriteMode status=%d\n", initStatus);
+			fprintf(stderr, "**main() Reset/WriteMode status=%d\n", initStatus);
 			msleep(300);
 			rtn++;
 			if (rtn > 5) {
-				printf("**main() Error! Reset/WriteMode failed=%d\n", rtn);
+				fprintf(stderr, "**main() Error! Reset/WriteMode failed=%d\n", rtn);
 				CleanUp(0);
 				exit(EXIT_FAILURE);
 			}
@@ -2941,7 +3001,7 @@ int main(int ac, char **av)
 				printf("p->ControlCount=%d\n", p->ControlCount);
 				if (p->ControlCount > 0) {
 					if (!EoApplyFilter()) {
-						fprintf(stderr, "EoApplyFilter error\n");
+						fprintf(stderr, "main: EoApplyFilter error\n");
 					}
 				}
 			}

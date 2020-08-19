@@ -16,7 +16,7 @@ static INT _GetPacketDebug = 0;
 #define _DEBUG if (_GetPacketDebug > 2)     // -ppp: _PD_VERBOSE
 #define _DEBUG2 if (_GetPacketDebug > 3)    // -pppp: _PD_NOISY
 #define _DEBUG3 if (_GetPacketDebug > 4)    // -ppppp: _PD_SUPER_NOISY
-#define _DEBUG0 if (_GetPacketDebug > 2)    // //NOT WORKED
+#define _DEBUG0 if (0) //_GetPacketDebug > 2)    // //NOT WORKED
 
 VOID DumpIt(BYTE *Start, BYTE *p)
 {
@@ -64,6 +64,7 @@ INT _PacketAnalyze(BYTE *Packet, INT DumpOption, INT ConvertOption)
 	const INT headerLength = 5;
 	const INT erp1IdLength = 4;
 	const INT idSize = 8;
+	const INT erp1AddrOffset = -5;
 	INT dataLength = Packet[0] << 8 | Packet[1];
 	INT optionalLength = Packet[2];
 	INT printLength = headerLength + dataLength + optionalLength;
@@ -204,7 +205,7 @@ INT _PacketAnalyze(BYTE *Packet, INT DumpOption, INT ConvertOption)
 	else { //ERP1
 		rORG = data[0];
 		for(i = 0; i < erp1IdLength; i ++) {
-			id[i] = data[dataLength + 1 + i];
+			id[i] = data[dataLength + erp1AddrOffset + i];
 		}
 		data++;
 	}
@@ -257,15 +258,17 @@ INT _PacketAnalyze(BYTE *Packet, INT DumpOption, INT ConvertOption)
 	if (isERP2 && ConvertOption) {
 		// Have to convert to ERP1
 		BYTE converted[528];
-		BYTE dBm = Packet[dataLength];
-		BYTE secLevel = Packet[dataLength + 1];
+		BYTE subTel = Packet[headerLength + dataLength];
+		BYTE dBm = Packet[headerLength + dataLength + 1];
+		BYTE secLevel = optionalLength > 2 ? Packet[headerLength + dataLength + 2] : 0;
 
 		dataLength -= (extendedHeaderAvailable + extendedTelegramTypeAvailable
 						+ originatorLength + destinationLength );
+		dataLength += erp1IdLength;
 		optionalLength += (erp1IdLength + 1);  //ToID_ERP1(4)+Subtel(1)
 
-		_DEBUG printf("ERP2Convert: rOrg=[%02X %02X]->%02X new dLen=%d oLen=%d\n",
-			telegramType, extendedTelegramType, rORG, dataLength, optionalLength);
+		_DEBUG printf("ERP2Convert: rOrg=[%02X %02X]->%02X new dLen=%d oLen=%d dBm=%02X sec=%02X\n",
+			telegramType, extendedTelegramType, rORG, dataLength, optionalLength, dBm, secLevel);
 
 		_DEBUG0 DumpIt(Packet, data);	
 
@@ -278,13 +281,20 @@ INT _PacketAnalyze(BYTE *Packet, INT DumpOption, INT ConvertOption)
 
 		// Data
 		converted[headerLength] = rORG;
-		for (i = 0; i < (dataLength - 1); i++) {
+		for (i = 0; i < (dataLength - 1 - erp1IdLength); i++) {
 			converted[headerLength + 1 + i] = *data++;
 		}
+		// Source address
+		for (i = 0; i < erp1IdLength; i++) {
+			converted[headerLength + dataLength - 1 - erp1IdLength + i] = id[i];
+		}
+		// Status byte
+		converted[headerLength + dataLength - 1] = 0x80; ////*data++;
+
 		// Optional Data
-		converted[headerLength + dataLength] = 0x00; // SubTelNum
-		for(i = 0; i < erp1IdLength; i++) {
-			converted[headerLength + dataLength + 1 + i] = id[i];
+		converted[headerLength + dataLength] = subTel;
+		for(i = 0; i < erp1IdLength; i++) { // Destination ID
+			converted[headerLength + dataLength + 1 + i] = 0xFF;
 		}
 		////
 		converted[headerLength + dataLength + 1 + erp1IdLength] = dBm;

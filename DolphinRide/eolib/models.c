@@ -10,7 +10,7 @@
 #include "../dpride/utils.h"
 #include "models.h"
 
-#define MODEL_DEBUG (1)
+//#define MODEL_DEBUG (1)
 
 #ifndef ENGINEERING_FACT
 #include "common-model.c"

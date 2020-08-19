@@ -303,10 +303,8 @@ int AddEepCache(char *Eep)
 int CacheProfiles(void)
 {
 	NODE_TABLE *nt;
-	//uint id;
 	char *eep;
 	int scCount;
-	//CM_TABLE *model;
 	int lineCount = 0;
 
 	nt = &NodeTable[0];

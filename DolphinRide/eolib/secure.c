@@ -435,6 +435,10 @@ PUBLICKEY *AddPublickey(EO_CONTROL *p, UINT Id, SECURE_REGISTER *ps)
 		printf("++%d: \n", i);
 #endif
 		pt = &PublickeyTable[i];
+		if (pt == NULL) {
+			fprintf(stderr, "AddPublickey: i=%d pt==NULL\n", i);
+			return NULL;
+		}
 		if (pt->Id == Id || pt->Id == 0UL) {
 			pt->Id = Id;
 			pt->Option = 0;

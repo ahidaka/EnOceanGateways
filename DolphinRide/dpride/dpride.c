@@ -646,13 +646,6 @@ void SendCommand(BYTE *cmdBuffer)
 //
 //
 //
-void DebugPrint(char *s)
-{
-	if (EoControl.Debug > 0) {
-		printf("Debug##%s\n", s);
-	}
-}
-
 void USleep(int Usec)
 {
 	const int mega = (1000 * 1000);
@@ -696,7 +689,8 @@ char *MakePath(char *Dir, char *File)
 int EoReadControl()
 {
 	EO_CONTROL *p = &EoControl;
-	int count;
+	int modelCount;
+	int csvCount;
 
 	if (p->ControlPath == NULL) {
 		p->ControlPath = MakePath(p->BridgeDirectory, p->ControlFile); 
@@ -707,15 +701,16 @@ int EoReadControl()
 	if (p->PublickeyPath == NULL) {
 		p->PublickeyPath = MakePath(p->BridgeDirectory, p->PublickeyFile); 
 	}
-	count = ReadModel(p->ModelPath);
-	count += ReadCsv(p->ControlPath);
-	p->ControlCount = count;
-#ifdef SECURE_DEBUG
-	printf("**EoReadControl: count=%d\n", count);
-#endif
+	modelCount = ReadModel(p->ModelPath);
+	csvCount = ReadCsv(p->ControlPath);
+	p->ControlCount = csvCount;
+
+	if (p->Debug > 1) {
+		printf("**EoReadControl: modelCount=%d csvCount=%d\n", modelCount, csvCount);
+	}
 	(void) CacheProfiles();
 
-	return count;
+	return csvCount;
 }
 
 void EoClearControl()
@@ -1324,7 +1319,7 @@ void LogMessageAdd(char *Point, double Data, char *Unit)
 {
 	EO_CONTROL *p = &EoControl;
 	char buf[128];
-	if (!p->QuietMode) {
+	if (p->Logger > 0 || p->LocalLog > 0 || !p->QuietMode) {
 		sprintf(buf, "%s=%.2lf%s ", Point, Data, Unit);
 		strcat(EoLogMonitorMessage, buf);
 	}
@@ -1334,7 +1329,7 @@ void LogMessageAddInt(char *Point, int Data)
 {
 	EO_CONTROL *p = &EoControl;
 	char buf[128];
-	if (!p->QuietMode) {
+	if (p->Logger > 0 || p->LocalLog > 0 || !p->QuietMode) {
 		sprintf(buf, "%s=%d ", Point, Data);
 		strcat(EoLogMonitorMessage, buf);
 	}
@@ -1344,7 +1339,7 @@ void LogMessageAddDbm(byte Data)
 {
 	EO_CONTROL *p = &EoControl;
 	char buf[128];
-	if (!p->QuietMode) {
+	if (p->Logger > 0 || p->LocalLog > 0 || !p->QuietMode) {
 		sprintf(buf, "-%d ", Data);
 		strcat(EoLogMonitorMessage, buf);
 	}
@@ -1354,7 +1349,7 @@ void LogMessageMonitor(char *Eep, char *Message)
 {
 	EO_CONTROL *p = &EoControl;
 	char buf[DATABUFSIZ];
-	if (!p->QuietMode) {
+	if (p->Logger > 0 || p->LocalLog > 0 || !p->QuietMode) {
 		sprintf(buf, "%s,%s", Eep ? Eep : NULL, Message);
 		strcat(EoLogMonitorMessage, buf);
 	}
@@ -1369,7 +1364,6 @@ void LogMessageOutput()
 		if (p->Logger > 0) {
 			//Warn("call MonitorMessage()");
 			loggedOK = MonitorMessage(EoLogMonitorMessage);
-			DebugPrint(EoLogMonitorMessage);
 			if (p->VFlags) {
 				printf("MsgOut: MonitorMessage=%s\n",
 					loggedOK ? "OK" : "FAILED");
@@ -1895,9 +1889,8 @@ void PushPacket(BYTE *Buffer)
 				}
 				else {
 					if (p->Debug > 1) {
-						Error("Secure NULL");
 						if (nt != NULL) {
-							fprintf(stderr, "PushPacket: EEP=%s Secure=%p\n", nt->Eep, nt->Secure);
+							fprintf(stderr, "PushPacket: EEP=%p Secure=%p\n", nt->Eep, nt->Secure);
 						}
 						else {
 							fprintf(stderr, "PushPacket: Secure GetTableId is NULL\n");
@@ -2118,15 +2111,14 @@ bool MainJob(BYTE *Buffer)
 					}
 				}
 				else {
-					Error("Secure NULL");
-					if (nt != NULL) {
-						fprintf(stderr, "MJ: EEP=%s Secure=%p\n", nt->Eep, nt->Secure);
+					if (p->Debug > 1) {
+						if (nt != NULL) {
+							fprintf(stderr, "MJ: EEP=%p Secure=%p\n", nt->Eep, nt->Secure);
+						}
+						else {
+							fprintf(stderr, "MJ: Secure GetTableId is NULL\n");
+						}
 					}
-					else {
-						fprintf(stderr, "MJ: Secure GetTableId is NULL\n");
-					}
-					//return;
-					// nothing to do
 					break;
 				}
 			}
@@ -2783,7 +2775,7 @@ int main(int ac, char **av)
 	}
 
 	InitSecureRegister();
-	(void) SecInit(); // needed before EoReadControl() / ReloadPublickey
+	(void) SecInit(); // needed before EoReadControl() && ReloadPublickey
 	
 	if (p->FilterOp == Clear) {
 		EoClearControl();
@@ -2962,6 +2954,24 @@ int main(int ac, char **av)
 				printf("CHANGE_MODE: newMode=%c\n", newMode);
 			}
 
+			switch(newMode) {
+			case 'M':
+				modeSet = modeMonitor;
+				break;
+			case 'O':
+				modeSet = modeOperation;
+				break;
+			case 'R':
+			default:
+				modeSet = modeRegister;
+				break;
+			}
+
+			initStatus = CO_WriteMode(modeSet); // ERP1:0 or ERP2:1
+			if (p->Debug > 0) {
+				printf("cmd=newMode: WriteMode=ESP%d\n", modeSet ? 2 : 1);
+			}
+
 			if (newMode == 'M' /*Monitor*/) {
 				/* Now! need debug */
 				if (p->Debug > 0)
@@ -2990,15 +3000,16 @@ int main(int ac, char **av)
 				//CO_WriteReset(); // no need
 			}
 			else if (newMode == 'O' /* Operation */) {
-				if (p->Debug > 0)
-					printf("cmd=newMode:Operation\n");
-				p->Mode = Operation; 
-				p->FilterOp = Read;
-				p->ControlCount = EoReadControl();
 #if SECURE_DEBUG
 				printf("!S! main: CMD_CHANGE_MODE, mode=O\n");
 #endif
-				printf("p->ControlCount=%d\n", p->ControlCount);
+				p->Mode = Operation; 
+				p->FilterOp = Read;
+				p->ControlCount = EoReadControl();
+				if (p->Debug > 0) {
+					printf("cmd=newMode:Operation ControlCount=%d\n",
+						p->ControlCount);
+				}
 				if (p->ControlCount > 0) {
 					if (!EoApplyFilter()) {
 						fprintf(stderr, "main: EoApplyFilter error\n");

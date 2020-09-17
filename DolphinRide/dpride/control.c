@@ -344,7 +344,7 @@ int ReadModel(char *Filename)
 
 	fd = fopen(Filename, "r");
 	if (fd == NULL) {
-		Error("Open error");
+		//Error("Open error");
 		return 0;
 	}
 

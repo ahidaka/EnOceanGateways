@@ -1,6 +1,6 @@
 #
 
-TARGET = $(LIBS)
+TARGET = $(TESTS) $(LIBS)
 
 CC = gcc
 AR = ar
@@ -16,8 +16,8 @@ INCDIR = ../dpride
 all: $(TARGET)
 	touch make.date
 
-eolib.a:
-	cp -p bin/`arch`/eolib.a .
+eolib.a: $(OBJS)
+	$(AR) rcs eolib.a $(OBJS)
 
 secure: secure.c secure.h $(INCDIR)/dpride.h
 	$(CC) $(CFLAGS) -DNEED_MAIN secure.c -o secure
@@ -32,5 +32,5 @@ models: models.c models.h $(INCDIR)/typedefs.h $(INCDIR)/ptable.h  $(INCDIR)/uti
 	$(CC) $(CFLAGS) -DBITTEST -DENGINEERING_FACT -o models models.c $(INCDIR)/utils.o
 
 clean:
-	/bin/rm -f *.o *~ core $(TARGET) make.date
+	/bin/rm -f *.o *~ $(TARGET) make.date
 

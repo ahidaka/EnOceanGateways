@@ -22,7 +22,7 @@ VOID DumpIt(BYTE *Start, BYTE *p)
 {
 	INT i;
 
-	printf("DumpIt: offset=%u\n", p - Start);
+	printf("DumpIt: offset=%ld\n", (LONG) (p - Start));
 	for(i = 0; i < 10; i++) {
 		printf("%02X ", p[i]);
 	}

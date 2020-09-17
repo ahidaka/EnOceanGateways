@@ -68,23 +68,20 @@ char *EoMakePath(char *Dir, char *File)
 INT EoReflesh(void)
 {
 	int count;
-	char *fname;
-
-	fname = EoMakePath(EO_DIRECTORY, EO_MODEL_FILE);
+	char *fname = EoMakePath(EO_DIRECTORY, EO_CONTROL_FILE);
 	count = ReadCsv(fname);
-	free(fname);
-
+	////free(fname);
 	return count;
 }
 
 EO_DATA *EoGetDataByIndex(int Index)
 {
-	NODE_TABLE *nt = &NodeTable[Index];
+        NODE_TABLE *nt = &NodeTable[Index];
 	char *fileName;
 	char *p;
-	FILE *f;
+        FILE *f;
 	char buf[BUFSIZ];
-	char *bridgePath;
+        char *bridgePath;
 	EO_DATA *pe = &EoData;
 	int i;
 

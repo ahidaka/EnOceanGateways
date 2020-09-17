@@ -260,7 +260,7 @@ VOID JsonSetup(USHORT Port, QUEUE_HEAD *Queue)
 		JsonBuffer[i] = malloc(sizeof(QUEUE_ENTRY));
 		if (JsonBuffer[i] == NULL) {
 			fprintf(stderr, "Cannot allocate JSON buffer=%d,%lu\n",
-				i, sizeof(QUEUE_ENTRY));
+				i, (ULONG) sizeof(QUEUE_ENTRY));
 		}
 		// Clear queue management area
 		memset(JsonBuffer[i], 0, offsetof(QUEUE_ENTRY, Data));

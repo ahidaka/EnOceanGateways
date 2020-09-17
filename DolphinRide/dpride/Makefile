@@ -1,12 +1,13 @@
+
 #
 
-TARGET = dpride dppoint ptable testmain sample-broker eologfile websocketmain
+TARGET = dpride dppoint ptable testmain sample-broker eologfile websocketmain jclient
 
 CC = gcc
 IFLAGS = -I/usr/include/libxml2
 CFLAGS = -g -Wall -Wno-parentheses -Wno-unused-function -Wno-format-overflow $(IFLAGS)
 
-DPOBJS = dpride.o ptable.o node.o control.o serial.o esp3.o logger.o websocket.o eologfile.o utils.o
+DPOBJS = dpride.o ptable.o node.o control.o serial.o esp3.o logger.o json.o websocket.o eologfile.o utils.o
 LIBDIR = ../eolib
 EOLIB = $(LIBDIR)/eolib.a
 
@@ -61,10 +62,15 @@ testmain.o: logger.h
 
 logger.o: logger.c logger.h
 
+json.o: json.c json.h
+
 websocket.o: aw-base64.h aw-sha1.h list.h websocket.h
 
 websocketmain: websocket.o
 	$(CC) -o websocketmain main.c websocket.o -lpthread
+
+jclient: jclient.c
+	$(CC) $(CFLAGS) -o jclient jclient.c
 
 install: dpride dppoint
 	cp -p dpride dppoint eologfile /usr/local/bin

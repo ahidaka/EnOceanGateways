@@ -13,6 +13,7 @@ typedef unsigned int uint;
 enum _boolvalue { false = 0, true = 1};
 #endif
 #define MAX_SUFFIX 999
+#define DEFAULT_JSON_PORT (8000)
 
 #define EO_ESP_PORT_USB "/dev/ttyUSB0"
 #define EO_ESP_PORT_S0 "/dev/ttyS0"
@@ -50,35 +51,36 @@ typedef enum _erp_mode
 
 typedef struct _eo_control
 {
-        EO_MODE Mode;
-        int AFlags;
-        int CFlags;
-        int VFlags;
-        int QuietMode;
-        int Logger;
-        int LocalLog;
-        int Timeout;
-        int XFlags;
+	EO_MODE Mode;
+	int AFlags;
+	int CFlags;
+	int VFlags;
+	int QuietMode;
+	int Logger;
+	int LocalLog;
+	int Timeout;
+	int XFlags;
+	int JsonServer;
+	int JsonPort;
 	EO_FILE_OP FilterOp;
-        int Debug;
+	int Debug;
 	int ControlCount;
 	int ERP1gw;
-        char *ControlFile;
+    char *ControlFile;
 	char *ControlPath;
-        char *CommandFile;
+	char *CommandFile;
 	char *CommandPath;
-        char *BrokerFile;
-        char *BrokerPath;
-        char *PublickeyFile;
-        char *PublickeyPath;
+	char *BrokerFile;
+	char *BrokerPath;
+	char *PublickeyFile;
+	char *PublickeyPath;
 	char *PidPath;
-        char *EEPFile;
-        char *LogFile;
-        char *ModelFile;
-        char *ModelPath;
-        char *BridgeDirectory;
-        char *ESPPort;
-
+	char *EEPFile;
+	char *LogFile;
+	char *ModelFile;
+	char *ModelPath;
+	char *BridgeDirectory;
+	char *ESPPort;
 } EO_CONTROL;
 
 typedef struct _eepdata
@@ -193,6 +195,7 @@ FILE *EoLogInit(char *Prefix, char *Extension);
 void EoLog(char *id, char *eep, char *msg);
 
 void EoLogRaw(char *Msg);
+
 //
 //
 //

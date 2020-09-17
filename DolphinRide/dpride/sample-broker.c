@@ -6,9 +6,9 @@
 #include <ctype.h>
 
 #ifdef EXTERNAL_BROKER
-#include "../dprode/typedefs.h"
-#include "../dprode/utils.h"
-#include "../dprode/dpride.h"
+#include "../dpride/typedefs.h"
+#include "../dpride/utils.h"
+#include "../dpride/dpride.h"
 #else
 #include "typedefs.h"
 #include "utils.h"

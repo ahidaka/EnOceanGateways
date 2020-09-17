@@ -137,7 +137,7 @@ int MonitorMessage(char *message)
 {
 	int result = 0;
 	int length = strlen(message);
-        WEBSOCKET_PARAM *data, *dend;
+    WEBSOCKET_PARAM *data, *dend;
 	
 	if (sock_count <= 0) {
 		PRINTF("MonitorMessage: No connection\n");
@@ -384,6 +384,7 @@ void *MonitorMain(void *Message)
 {
 	struct sockaddr_in local;
 	int on = 1;
+	(void) Message;
 
 	PRINTF("MonitorMain...\n");
 	listenSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -454,7 +455,7 @@ int MonitorStart(void)
 		fprintf(stderr, "Monitor already started\n");
 		return 0;
 	}
-        pthread_create(&MonitorHandle, NULL, MonitorMain, NULL);
+	pthread_create(&MonitorHandle, NULL, MonitorMain, NULL);
 	return 1;
 }
 

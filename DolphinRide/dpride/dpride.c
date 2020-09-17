@@ -20,12 +20,13 @@
 #include "serial.h"
 #include "esp3.h"
 #include "logger.h"
+#include "json.h"
 #include "utils.h"
 #include "../eolib/models.h"
 #include "../eolib/secure.h"
 
 static const char copyright[] = "\n(c) 2017 Device Drivers, Ltd. \n";
-static const char version[] = "\n@ dpride Version 1.27 \n";
+static const char version[] = "\n@ dpride Version 1.28 \n";
 
 //#define ERP2_DEBUG (1)
 //#define SECURE_DEBUG (1)
@@ -66,21 +67,21 @@ static const char version[] = "\n@ dpride Version 1.27 \n";
 
 #define INCREMENT(a) ((a) = (((a)+1) & 0x7FFFFFFF))
 
-#define QueueSetLength(Buffer, Length) \
-	((QUEUE_ENTRY *)((Buffer) - offsetof(QUEUE_ENTRY, Data)))->Length = (Length)
+#define QueueSetLength(Buf, Len) \
+	((QUEUE_ENTRY *)((Buf) - offsetof(QUEUE_ENTRY, Data)))->Length = (Len)
 
-#define QueueGetLength(Buffer) \
-	(((QUEUE_ENTRY *)((Buffer) - offsetof(QUEUE_ENTRY, Data)))->Length)
+#define QueueGetLength(Buf) \
+	(((QUEUE_ENTRY *)((Buf) - offsetof(QUEUE_ENTRY, Data)))->Length)
 
-//typedef struct QueueHead {...} QEntry;
 STAILQ_HEAD(QueueHead, QEntry);
 typedef struct QueueHead QUEUE_HEAD;
 
 struct QEntry {
-	BYTE Data[DATABUFSIZ];
+	STAILQ_ENTRY(QEntry) Entries;
 	INT Number;
 	INT Length;
-	STAILQ_ENTRY(QEntry) Entries;
+	BYTE Data[DATABUFSIZ];
+	//....;
 };
 typedef struct QEntry QUEUE_ENTRY;
 
@@ -88,6 +89,7 @@ QUEUE_HEAD DataQueue;     // Received Data
 QUEUE_HEAD ResponseQueue; // CO Command Responce
 QUEUE_HEAD ExtraQueue;    // Event, Smack, etc currently not used
 QUEUE_HEAD FreeQueue;     // Free buffer
+QUEUE_HEAD JsonQueue;     // Json service
 
 static const INT FreeQueueCount = 8;
 static const INT QueueTryTimes = 10;
@@ -311,22 +313,22 @@ BYTE *Dequeue(QUEUE_HEAD *Queue)
 }
 
 #if 0 
-#define	STAILQ_INSERT_TAIL(head, elm, field) do {			\
+#define	STAILQ_INSERT_TAIL(head, elm, field) do {	\
 	(elm)->field.stqe_next = NULL;					\
-	*(head)->stqh_last = (elm);					\
-	(head)->stqh_last = &(elm)->field.stqe_next;			\
+	*(head)->stqh_last = (elm);					    \
+	(head)->stqh_last = &(elm)->field.stqe_next;	\
 } while (/*CONSTCOND*/0)
 
-#define	STAILQ_REMOVE(head, elm, type, field) do {			\
+#define	STAILQ_REMOVE(head, elm, type, field) do {	\
 	if ((head)->stqh_first == (elm)) {				\
 		STAILQ_REMOVE_HEAD((head), field);	
 
 head=Queue;
 field=Entries;
 
-#define	STAILQ_FOREACH(var, head, field)				\
+#define	STAILQ_FOREACH(var, head, field)			\
 	for ((var) = ((head)->stqh_first);				\
-		(var);							\
+		(var);										\
 		(var) = ((var)->field.stqe_next))
 #endif
 
@@ -788,6 +790,7 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
 	int xFlags = 0; //ERP2 on ESP3 flag
 	int opt;
 	int timeout = 0;
+	int jsonPort = DEFAULT_JSON_PORT;
 	char *controlFile = EO_CONTROL_FILE;
 	char *commandFile = EO_COMMAND_FILE;
 	char *brokerFile = BROKER_FILE;
@@ -797,7 +800,7 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
 	char *serialPort = "\0";
 	char *modelFile = EO_MODEL_FILE;
 
-	while ((opt = getopt(ac, av, "AcDlLmopPqrvxb:d:e:f:g:k:s:t:z:")) != EOF) {
+	while ((opt = getopt(ac, av, "AcDjlLmopPqrvxb:d:e:f:g:J:k:s:t:z:")) != EOF) {
 		switch (opt) {
 		case 'A': //PrintProfileAll
 			p->AFlags++;
@@ -841,6 +844,13 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
 		case 'q': //quiet mode
 			p->QuietMode++;
 			break;
+		case 'j': //JSON Service
+			p->JsonServer++;
+			break;
+		case 'J': //JSON port
+			p->JsonServer++;
+			jsonPort = atoi(optarg);
+			break;
 
 		case 'f': //Control file name
 			controlFile = optarg;
@@ -883,6 +893,8 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
 				"  Output log options:\n"
 				"    -l    Output websocket log for logger client\n"
 				"    -L    Output local logfile log\n\n"
+				"    -j    Provide JSON service (Experimental)\n"
+				"    -J    JSON TCP socket service port (default:8000)\n"
 				"  Runtime options:"
 				"    -d directory   Bridge file directrory\n"
 				"    -f file        Control file\n"
@@ -926,7 +938,9 @@ void EoParameter(int ac, char**av, EO_CONTROL *p)
 		// websocket messages are enough to see status
 		p->QuietMode++;
 	}
-
+	if (p->JsonServer) {
+		p->JsonPort = jsonPort;
+	}
 	PacketDebug(pFlags);
 	SecNoticeLevel(vFlags);
 	ESP_Debug(p->Debug);
@@ -1302,10 +1316,14 @@ void LogMessageStart(uint Id, char *Eep, char *Prefix)
 	struct tm   *time_inf;
 	char        buf[64];
   
+	timep = time(NULL);
+	time_inf = localtime(&timep);
+	strftime(buf, sizeof(buf), "%x %X", time_inf);
+
+	if (p->JsonServer && Eep != NULL) {
+		JsonTimeStamp(buf);
+	}
 	if (p->Logger > 0 || p->LocalLog > 0 || !p->QuietMode) {
-		timep = time(NULL);
-		time_inf = localtime(&timep);
-		strftime(buf, sizeof(buf), "%x %X", time_inf);
 		if (Eep != NULL) {
 			sprintf(EoLogMonitorMessage, "%s,%08X,%s%s,", buf, Id, Prefix, Eep);
 		}
@@ -1319,6 +1337,9 @@ void LogMessageAdd(char *Point, double Data, char *Unit)
 {
 	EO_CONTROL *p = &EoControl;
 	char buf[128];
+	if (p->JsonServer) {
+		JsonAddData(Point, Data, Unit);
+	}
 	if (p->Logger > 0 || p->LocalLog > 0 || !p->QuietMode) {
 		sprintf(buf, "%s=%.2lf%s ", Point, Data, Unit);
 		strcat(EoLogMonitorMessage, buf);
@@ -1329,6 +1350,9 @@ void LogMessageAddInt(char *Point, int Data)
 {
 	EO_CONTROL *p = &EoControl;
 	char buf[128];
+	if (p->JsonServer) {
+		JsonAddInt(Point, Data);
+	}
 	if (p->Logger > 0 || p->LocalLog > 0 || !p->QuietMode) {
 		sprintf(buf, "%s=%d ", Point, Data);
 		strcat(EoLogMonitorMessage, buf);
@@ -1339,6 +1363,9 @@ void LogMessageAddDbm(byte Data)
 {
 	EO_CONTROL *p = &EoControl;
 	char buf[128];
+	if (p->JsonServer) {
+		JsonAddDbm(Data);
+	}
 	if (p->Logger > 0 || p->LocalLog > 0 || !p->QuietMode) {
 		sprintf(buf, "-%d ", Data);
 		strcat(EoLogMonitorMessage, buf);
@@ -2006,6 +2033,7 @@ bool MainJob(BYTE *Buffer)
 	extern void PrintItems(); //// DEBUG control.c
 	extern void PrintProfileAll();
 	extern int GetTableIndex(UINT Id);
+	extern char *GetTableEep(uint Target);
 
 	if (p->Debug > 3) {
 		printf("MainJob:\n");
@@ -2180,13 +2208,13 @@ bool MainJob(BYTE *Buffer)
 				INT dataStart = 0;
 				BYTE newOrg = 0;
 
-				///////////////////////////////
+				//This stops the explosion in case of mis-decryption.//
 				if (cipherLength < 2 || cipherLength > 64) {
 					printf("####MJ:Invalid cipherLength=%d\n", cipherLength);
 					cipherLength = 2;
 					msleep(500);
 				}
-				///////////////////////////////
+				//// - - - ////
 
 				(void) SecCheck(sec, &Buffer[validLength]);
 				decLength = SecDecrypt(sec, &Buffer[HEADER_SIZE + 1],
@@ -2541,13 +2569,15 @@ bool MainJob(BYTE *Buffer)
 	}
 	//else if (p->Mode == Operation || teachIn && (rOrg == 0xD2 || rOrg == 0xF6)) {
 	else if (p->Mode == Operation) {
+		int nodeIndex = -1;
+		uint uid = ByteToId(id);
+
 #if CMD_DEBUG
 		printf("!C!p->Mode == Operation\n");
 #endif
-		// Report details for log
-		char *GetTableEep(uint Target);
-		int nodeIndex = -1;
-		uint uid = ByteToId(id);
+		if (p->JsonServer) {
+			JsonCreate(JsonData, uid, GetTableEep(uid), rOrg, (UINT) isSecure);
+		}
 
 		switch(rOrg) {
 		case 0xF6: //RPS:
@@ -2561,6 +2591,9 @@ bool MainJob(BYTE *Buffer)
 			}
 			LogMessageAddDbm(data[dataLength + 4]);
 			LogMessageOutput();
+			if (p->JsonServer) {
+				JsonRelease(&JsonQueue);
+			}
 			break;
 
 		case 0xD5: //1BS:
@@ -2574,6 +2607,9 @@ bool MainJob(BYTE *Buffer)
 			}
 			LogMessageAddDbm(data[dataLength + 4]);
 			LogMessageOutput();
+			if (p->JsonServer) {
+				JsonRelease(&JsonQueue);
+			}
 			break;
 			
 		case 0xD2: //VLD:
@@ -2588,6 +2624,9 @@ bool MainJob(BYTE *Buffer)
 			}
 			LogMessageAddDbm(data[dataLength + 4]);
 			LogMessageOutput();
+			if (p->JsonServer) {
+				JsonRelease(&JsonQueue);
+			}
 			break;
 
 		case 0xA5: //4BS:
@@ -2602,6 +2641,9 @@ bool MainJob(BYTE *Buffer)
 			}
 			LogMessageAddDbm(data[dataLength + 4]);
 			LogMessageOutput();
+			if (p->JsonServer) {
+				JsonRelease(&JsonQueue);
+			}
 			break;
 
 		case 0xB2: //CM_CD:
@@ -2617,6 +2659,9 @@ bool MainJob(BYTE *Buffer)
 			}
 			LogMessageAddDbm(data[dataLength + 4]);
 			LogMessageOutput();
+			if (p->JsonServer) {
+				JsonRelease(&JsonQueue);
+			}
 			break;
 
 		case 0xB3: //CM_SD:
@@ -2631,6 +2676,9 @@ bool MainJob(BYTE *Buffer)
 			}
 			LogMessageAddDbm(data[dataLength + 4]);
 			LogMessageOutput();
+			if (p->JsonServer) {
+				JsonRelease(&JsonQueue);
+			}
 			break;
 
 		case 0xD4: //UTE
@@ -2675,7 +2723,7 @@ int main(int ac, char **av)
 	ERP_MODE modeOperation;
 	ERP_MODE modeMonitor;
 	ERP_MODE modeSet;
-	//extern void PrintEepAll();
+        struct stat sb;
 	extern void PrintProfileAll();
 
 	if (p->Debug > 1) {
@@ -2698,6 +2746,17 @@ int main(int ac, char **av)
 	printf("!C!%s: change mode to Monitor\n", __FUNCTION__);
 #endif
 	EoParameter(ac, av, p);
+
+        rtn = stat(p->BridgeDirectory, &sb);
+	if (rtn < 0){
+		mkdir(p->BridgeDirectory, 0777);
+	}
+	rtn = stat(p->BridgeDirectory, &sb);
+	if (!S_ISDIR(sb.st_mode) || rtn < 0) {
+		fprintf(stderr, "EoSetEep: Directory error=%s\n", p->BridgeDirectory);
+		exit(0);
+	}
+
 	p->PidPath = MakePath(p->BridgeDirectory, PID_FILE);
 
 	f = fopen(p->PidPath, "w");
@@ -2793,11 +2852,6 @@ int main(int ac, char **av)
 		PrintEepAll();
 		PrintProfileAll();
 	}
-	//if (p->Mode = Operation && p->ControlCount > 0) {
-	//	if (!EoApplyFilter()) {
-	//		fprintf(stderr, "main: EoApplyFilter error\n");
-	//	}
-	//}
 
 	////////////////////////////////
 	// Threads, queues, and serial pot
@@ -2806,10 +2860,13 @@ int main(int ac, char **av)
 	STAILQ_INIT(&ResponseQueue);
 	STAILQ_INIT(&ExtraQueue);
 	STAILQ_INIT(&FreeQueue);
+	STAILQ_INIT(&JsonQueue);
 	FreeQueueInit();	
 	pthread_mutex_init(&DataQueue.lock, NULL);
 	pthread_mutex_init(&ResponseQueue.lock, NULL);
 	pthread_mutex_init(&ExtraQueue.lock, NULL);
+	pthread_mutex_init(&FreeQueue.lock, NULL);
+	pthread_mutex_init(&JsonQueue.lock, NULL);
 
 	if (InitSerial(&fd)) {
 		fprintf(stderr, "main: InitSerial error\n");
@@ -2892,11 +2949,17 @@ int main(int ac, char **av)
 		CO_ReadVersion(versionString);
 	}
 
+	if (p->JsonServer) {
+		JsonSetup(p->JsonPort, &JsonQueue);
+	}
 	if (p->Mode == Operation && p->ControlCount > 0) {
 		if (p->VFlags) {
 			printf("EoApplyFilter()\n");
 		}
 		EoApplyFilter();
+		if (p->JsonServer) {
+			(VOID) JsonStart();
+		}
 	}
 
 	for(i = 0; i < CDM_TABLE_SIZE; i++) {
@@ -2917,7 +2980,7 @@ int main(int ac, char **av)
 
 		printf("Wait...\n");
 		SignalAction(SIGUSR2, SignalCatch);
-			// wait signal forever
+		// wait signal forever
 		while(sleep(60*60*24*365) == 0)
 			;
 		cmd = GetCommand(&param);
@@ -2973,6 +3036,7 @@ int main(int ac, char **av)
 			}
 
 			if (newMode == 'M' /*Monitor*/) {
+				JsonStop();
 				/* Now! need debug */
 				if (p->Debug > 0)
 					printf("cmd=newMode:Monitor\n");
@@ -2981,6 +3045,7 @@ int main(int ac, char **av)
 				CO_WriteFilterEnable(OFF);
 			}
 			else if (newMode == 'R' /*Register*/) {
+				JsonStop();
 				if (p->Debug > 0)
 					printf("cmd=newMode:Register\n");
 				p->Mode = Register;
@@ -2988,6 +3053,7 @@ int main(int ac, char **av)
 				/* Now! Enable Teach IN */
 			}
 			else if (newMode == 'C' /*Clear and Register*/) {
+				JsonStop();
 				if (p->Debug > 0)
 					printf("cmd=newMode:Clear and Register\n");
 				EoClearControl();
@@ -3013,6 +3079,9 @@ int main(int ac, char **av)
 				if (p->ControlCount > 0) {
 					if (!EoApplyFilter()) {
 						fprintf(stderr, "main: EoApplyFilter error\n");
+					}
+					if (p->JsonServer) {
+						(VOID) JsonStart();
 					}
 				}
 			}

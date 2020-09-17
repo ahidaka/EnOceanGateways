@@ -511,9 +511,9 @@ void WriteRpsBridgeFile(uint Id, byte *Data)
 		return;
 	}
 	
-	LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
+	//LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
 	
-        //F6-02-04
+    //F6-02-04
 	if (!strcmp(pp->StrKey, "F6-02-04")) {
 		pu = &pp->Unit[0];
 		rawData = Data[0];
@@ -595,7 +595,7 @@ void Write1bsBridgeFile(uint Id, byte *Data)
 		return;
 	}
 	
-	LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
+	//LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
 
         //D5-00-01
 	pu = &pp->Unit[0];
@@ -637,7 +637,7 @@ void Write4bsBridgeFile(uint Id, byte *Data)
 		return;
 	}
 
-	LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
+	//LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
 
 	pu = &pp->Unit[0];
 	for(i = 0; i < nt->SCCount; i++) {
@@ -684,7 +684,7 @@ void WriteVldBridgeFile(uint Id, byte *Data)
 		return;
 	}
 
-	LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
+	//LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
 
 	pu = &pp->Unit[0];
 	for(i = 0; i < nt->SCCount; i++) {
@@ -745,7 +745,7 @@ void WriteCdBridgeFile(uint Id, byte *Data)
 		return;
 	}
 
-	LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
+	//LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
 
 	pu = &pp->Unit[0];
 	for(i = 0; i < nt->SCCount; i++) {
@@ -803,7 +803,7 @@ void WriteSdBridgeFile(uint Id, byte *Data)
 		return;
 	}
 
-	LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
+	//LogMessageStart(Id, pp->StrKey, nt->Secure ? "!" : "");
 
 	count = GetBits(Data, 0, headerSize); // SD Header
 	fromBit = headerSize;

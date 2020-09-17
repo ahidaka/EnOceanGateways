@@ -39,6 +39,7 @@ typedef int BOOL;
 typedef char CHAR;
 typedef unsigned char BYTE;
 typedef unsigned short USHORT;
+typedef unsigned short SHORT;
 typedef unsigned short WORD;
 typedef int INT;
 typedef unsigned int UINT;

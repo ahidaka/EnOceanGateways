@@ -7,6 +7,7 @@ var utils = require('./utils');
 var app = express();
 app.set('view options', { layout: false });
 app.set('view engine', 'ejs');
+app.use('/', express.static('public'));
 
 if (require.main === module) {
     main()

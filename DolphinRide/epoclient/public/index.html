@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>ローカルグラフ表示</title>
+
+<!--<link rel="stylesheet" type="text/css" href="dist/css/tests.css">-->
+<link rel="stylesheet" type="text/css" href="./tests.css">
+<!--<script src="http://code.jquery.com/jquery-1.10.1.min.js"></script>-->
+<!--<script src="https://code.jquery.com/jquery-1.11.1.js"></script>-->
+
+<script src="./jquery-1.11.1.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<!--<script src="http://d3js.org/d3.v3.js" charset="utf-8"></script>-->
+<script src="./d3.v3.js"></script>
+<!--<script src="dist/js/epoch.js"></script>-->
+<script src="./epoch.js"></script>
+<script src="./data.js"></script>
+<!--<link rel="stylesheet" type="text/css" href="dist/css/epoch.css">-->
+<link rel="stylesheet" type="text/css" href="./epoch.css">
+
+<script>
+    let nextTime = (function() {
+        let currentTime = parseInt(new Date().getTime() / 1000);
+        return function() { return currentTime++; }
+    })();
+</script>
+
+<style>
+    .gauges {
+        display: inline-block;
+        margin: 1em;
+    }
+</style>
+
+</head>
+<body>
+    
+<h1>ローカルグラフ表示</h1>
+
+<!-- Clock test -->
+<p id="RealtimeClockArea"></p>
+
+<!-- TP HU IL Gauge -->
+<div id="gauge-tp" class="gauges">
+    <h2>TP 温度センサー</h2>
+    <div class="epoch gauge-small"></div>
+</div>
+<div id="gauge-hu" class="gauges">
+    <h2>HU 湿度センサー</h2>
+    <div class="epoch gauge-small"></div>
+</div>
+<div id="gauge-il" class="gauges">
+    <h2>IL 照度センサー</h2>
+    <div class="epoch gauge-small"></div>
+</div>
+<script>
+    //
+    var values = {};
+    var units = {};
+    var tphuDataReceived = false;
+    var accDataReceived = false;
+
+    //
+    // Gauge display
+    //
+    $(function() {
+        //var data = new GaugeData();
+
+        const coOpen = '<font size="+2" color="red">CO:開</font>';
+        const coClose = '<font size="+2" color="lime">CO:閉</font>';
+        const asNormal = '<font size="+2" color="blue">AS:通常</font>';
+        const asExceed1 = '<font size="+2" color="purple">AS:閾値超過1</font>';
+        const asExceed2 = '<font size="+2" color="orange">AS:閾値超過2</font>';
+
+        let coMsgs = [coOpen, coClose];
+        let asMsgs = [asNormal, asExceed1, asExceed2];
+
+        let datas = {
+            TP: 0.0,
+            HU: 0.0,
+            IL: 0,
+        };
+
+        let props = {
+            TP: { type: 'time.gauge', value: 0, format: function(v) { return Math.abs((v*100).toFixed(1)) + "℃"; } },
+            HU: { type: 'time.gauge', value: 0, format: function(v) { return Math.abs((v*100).toFixed(1)) + "%"; } },
+            IL: { type: 'time.gauge', value: 0, format: function(v) { return Math.abs((v*1000).toFixed(0)) + "lx"; } },
+        };
+
+        let gauges = {
+            TP: $('#gauge-tp .epoch').epoch(props["TP"]),
+            HU: $('#gauge-hu .epoch').epoch(props["HU"]),
+            IL: $('#gauge-il .epoch').epoch(props["IL"]),
+        };
+
+        function showClock() {
+            var nowTime = new Date();
+            var nowHour = nowTime.getHours();
+            var nowMin  = nowTime.getMinutes();
+            var nowSec  = nowTime.getSeconds();
+            var msg = "現在時刻：" + nowHour + ":" + nowMin + ":" + nowSec;
+            document.getElementById("RealtimeClockArea").textContent = msg;
+        }
+
+        function updateGauge() {
+
+            datas["TP"] = values["TP"] * 0.01;
+            datas["HU"] = values["HU"] * 0.01;
+            datas["IL"] = values["IL"] * 0.001;
+
+            for (let point in datas) {
+                let dataValue = Math.abs(datas[point]);
+                if (dataValue > 0) {
+                    //gauges[point].update(Math.abs(datas[point]));
+                    gauges[point].update(dataValue);
+                }
+                console.log("[" + point + "]=" + dataValue);
+            }
+            if (!isNaN(values["CO"])) {
+                document.getElementById("ContactOperationArea").innerHTML = coMsgs[values["CO"]];
+                document.getElementById("AccelStatusArea").innerHTML = asMsgs[values["AS"]];
+            }
+
+            showClock();
+        }
+
+        setInterval(updateGauge, 1000);
+    });
+</script>
+
+<!-- AS CO display -->
+<div>
+    <h2>CO 開閉状態 AS 加速度状態</h2>
+    <p>
+        <!--<font size="12" color="blue">AS:通常</font>-->
+        <span id="ContactOperationArea"></span>
+        &nbsp;&nbsp;&nbsp;&nbsp;
+        <!--<font size="12" color="blue">CO:開</font>-->
+        <span id="AccelStatusArea"></span>
+    </p>
+</div>
+
+<!-- TP HU IL CO line -->
+<div id="tphuilco-line" class="test">
+    <h2>
+        <font color="#d62728">TP 温度</font>&nbsp;&nbsp;
+        <font color="#1f77b4">HU 湿度</font>&nbsp;&nbsp;
+        <font color="#ff7f0e">IL 照度</font>&nbsp;&nbsp;
+        <font color="#2ca02c">CO 開閉</font>&nbsp;&nbsp;
+    </h2>
+    <div class="epoch"></div>
+</div>
+
+<script>
+    $(function() {
+        var data = [
+            {
+            label: 'HU',
+            values: [],
+            range: [0, 100]
+            },
+            {
+            label: 'IL',
+            values: [],
+            range: [0, 1000]
+            },
+            {
+            label: 'CO',
+            values: [],
+            range: [-0.5, 1.5]
+            },
+            {
+            label: 'TP',
+            values: [],
+            range: [0, 100]
+            }
+        ],
+        length = 50,
+        nextIndex = length,
+        interval = null;
+        
+        var tphuilcoGraph = $('#tphuilco-line .epoch').epoch({
+            type: 'time.line',
+            axes: ['left', 'right', 'bottom'],
+            //-ticks: { time: 10, right: 5, left: 5 },
+            //-margins: { top: 10, right: 50, bottom: 30, left: 50 },
+            //-height: 150,
+            data: data,
+            range: {
+                right: [-0.5, 1.5],
+                left: [0, 100]
+            }
+        });
+
+        var updateGraph = function() {
+            let tp = values["TP"];
+            let hu = values["HU"];
+            let il = values["IL"];
+            let co = values["CO"];
+            let time = nextTime();
+
+            if (tphuDataReceived) {
+                tphuilcoGraph.push([
+                    {time: time, y: hu},
+                    {time: time, y: il},
+                    {time: time, y: co},
+                    {time: time, y: tp}
+                ]);
+                nextIndex++;
+            }
+            tphuDataReceived = false;
+
+            //    console.log("E(" + i + ") t:" + tp + " h:" + hu + " i:" + il + " c:" + co);
+            //}
+        }
+        interval = setInterval(updateGraph, 1000);
+    });
+</script>
+
+<!-- AX AY AZ AS line -->
+<div id="accel-line" class="test">
+    <h2>
+        <font color="#ff7f0e">AX </font>
+        <font color="#2ca02c">AY </font>
+        <font color="#d62728">AZ </font>
+        <font color="#565656">加速度</font>
+        <font color="#1f77b4 ">AS 状態</font>
+    </h2>
+    <p>
+    </p>
+    <div class="epoch"></div>
+</div>
+
+<script>
+    $(function() {
+        var data = [
+            {
+            label: 'AS',
+            values: [],
+            range: [0, 4]
+            },
+            {
+            label: 'AX',
+            values: [],
+            range: [-3, 3]
+            },
+            {
+            label: 'AY',
+            values: [],
+            range: [-3, 3]
+            },
+            {
+            label: 'AZ',
+            values: [],
+            range: [-3, 3]
+            }
+        ],
+        length = 50,
+        nextIndex = length,
+        interval = null;
+
+        var accelGraph = $('#accel-line .epoch').epoch({
+            type: 'time.line',
+            axes: ['left', 'right', 'bottom'],
+            //-ticks: { time: 10, right: 5, left: 5 },
+            //-margins: { top: 10, right: 50, bottom: 30, left: 50 },
+            //-height: 150,
+            data: data,
+            range: {
+                right: [0, 4],
+                left: [-3, 3]
+            }
+        });
+
+        var updateGraph = function() {
+            //let length = 50;
+            //for (let i = 0; i < length; i++) {
+            let ax = values["AX"];
+            let ay = values["AY"];
+            let az = values["AZ"];
+            let as = values["AS"];
+            let time = nextTime();
+
+            if (accDataReceived) {
+                accelGraph.push([
+                    {time: time, y: as},
+                    {time: time, y: ax},
+                    {time: time, y: ay},
+                    {time: time, y: az}
+                ]);
+
+                nextIndex++;
+            }
+            accDataReceived = false;
+            // console.log("A(" + i + ") x:" + ax + " y:" + ay + " z:" + az + " s:" + as);
+            //}
+        }
+
+        setInterval(updateGraph, 1000);
+    });
+</script>
+
+<script>
+    $(() => {
+        const socket = io();
+        //socket.on('message', (msg) => {
+        socket.on("message", function (d) {
+            
+            let obj = JSON.parse(d);
+
+            let dataTelegram = obj.dataTelegram;
+            let deviceId = dataTelegram.deviceId;
+            let profile = dataTelegram.profile;
+            let dataArray = dataTelegram.functions;
+
+            dataArray.forEach(function(dataNode) {
+            //console.log(" ",
+            //  "key=" + dataNode.key,
+            //  "value=" + dataNode.value,
+            //  "unit=" + dataNode.unit);
+
+                values[dataNode.key] = dataNode.value;
+                units[dataNode.key] = dataNode.unit;
+            });
+
+            tphuDataReceived = accDataReceived = true;
+
+        });
+    });
+  </script>
+
+</body>
+</html>

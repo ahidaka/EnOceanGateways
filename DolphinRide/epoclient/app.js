@@ -34,7 +34,6 @@ function main() {
     });
 
     socketio.on('connection', (socket) => {
-        clearIntervalConnect();
     	console.log('sensor connected');
 	    socket.on('disconnect', () => {
 	        console.log('sensor disconnected');
@@ -117,7 +116,6 @@ function main() {
     // Create socket and bind callbacks
     let client = new net.Socket();
     client.on('connect', connectEventHandler);
-    //client.on('data',    function(data) {dataEventHandler(data)});
     client.on('data',    (data) => dataEventHandler(data));
     client.on('end',     endEventHandler);
     client.on('timeout', timeoutEventHandler);
@@ -128,10 +126,6 @@ function main() {
     // Connect
     console.log('Connecting to ' + host + ':' + port + '...');
     makeConnection();
-
-    //app.get('/', (req, res) => {
-    //  res.sendFile(__dirname + 'index.html');
-    //});
 
     console.log('OK');
 }

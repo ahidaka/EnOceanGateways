@@ -39,4 +39,25 @@ Verion 1.01 releases notes.
 
 You can see how to make brokers at https://github.com/ahidaka/Open62541-Work.
 
+### Sample Client
+
+#### epoclient -- WebSocket Client
+
+Sample Client by Epoch.js.
+EPOCH.js is a library that can draw graphs in real time.
+Processes JSON data with the DolphinRide '-j'option to draw gauges and line graphs in real time.
+
+#### jsclient -- Javascript Client
+
+Sample Client by Node.js.
+This uses DolphinRide '-j'option, and the client that handles JSON output data.
+It shows how easy it is to handle JSON data in Javascript.
+
+#### wsclient -- WebSocket Client
+
+Sample WebSocket Client by Node.js, views, and ejs.
+This uses the DolphinRide WebSocket interface. The received data is displayed in real time on the client browser.
+
+<br/>
+
 &copy; 2017-2019 Atomu Hidaka  All rights reserved.

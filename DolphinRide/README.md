@@ -7,6 +7,14 @@
 
 Note: Need eep.xml from [DolphinView](https://www.enocean.com/download/) in your working directory.
 
+### How to build
+
+libxml2 is needed to build.
+
+```sh 
+$ sudo apt install libxml2
+```
+
 ### How to use
 ```sh 
 Usage: dpride [-m|-r|-o][-c][-v]
